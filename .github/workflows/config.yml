@@ -1,0 +1,312 @@
+name: PowerBI Connector CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  connector-version: 1.1.0
+  # Pin the SDK test harness so test behavior does not change unexpectedly between runs.
+  pq-sdk-tools-version: 2.155.2
+
+jobs:
+  build:
+    name: Build connector & installers
+    runs-on: windows-latest
+
+    # Exposed so the release job can name versions in the release notes without re-deriving them
+    outputs:
+      driver-version: ${{ steps.driver.outputs.driver-version }}
+      bundle-version: ${{ steps.bundle.outputs.bundle-version }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Install WiX Toolset
+        shell: powershell
+        run: choco install -y -r --no-progress wixtoolset
+
+      - name: Fetch ODBC driver installer
+        id: driver
+        uses: ./.github/actions/fetch-odbc-driver
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Read bundle version
+        id: bundle
+        shell: bash
+        run: |
+          # The bundle version is tracked independently of the connector/driver versions.
+          bundle_version=$(sed -nE 's/.*<\?define Version = "([0-9]+\.[0-9]+\.[0-9]+)" \?>.*/\1/p' \
+            "power-bi-bundle-installer/Bundle.wxs" | head -n1)
+          echo "Bundle version: $bundle_version"
+          echo "bundle-version=$bundle_version" >> "$GITHUB_OUTPUT"
+
+      - name: Check version sync
+        shell: bash
+        run: ./scripts/check-version-sync.sh
+
+      - name: Build connector
+        shell: powershell
+        run: msbuild ".\SingleStore Direct Query.sln" -p:Configuration=Release
+
+      - name: Upload SingleStoreODBC.mez artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SingleStoreODBC.mez
+          path: bin\Release\SingleStoreODBC.mez
+
+      - name: Build connector installer
+        shell: powershell
+        run: |
+          New-Alias -Name candle -Value "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle"
+          New-Alias -Name light -Value "C:\Program Files (x86)\WiX Toolset v3.14\bin\light"
+          Copy-Item -Path ".\bin\Release\SingleStoreODBC.mez" -Destination ".\SingleStoreODBC.mez"
+          candle ".\power-bi-connector-installer\Power BI Connector.wxs" -o .\power-bi-connector-installer\obj\
+          light ".\power-bi-connector-installer\obj\*.wixobj" -o .\power_bi_connector_installer.msi
+
+      - name: Upload connector installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: power_bi_connector_installer.msi
+          path: power_bi_connector_installer.msi
+
+      - name: Build bundle installer
+        shell: powershell
+        run: |
+          New-Alias -Name candle -Value "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle"
+          New-Alias -Name light -Value "C:\Program Files (x86)\WiX Toolset v3.14\bin\light"
+          candle ".\power-bi-bundle-installer\Bundle.wxs" -o ".\power-bi-bundle-installer\obj\" -ext WixBalExtension
+          # Env var names contain hyphens, so they must be accessed with ${env:...} brace syntax.
+          # The .exe suffix carries both component versions so a downloaded file self-identifies.
+          $connectorVersion = ${env:connector-version}
+          $driverVersion = ${env:driver-version}
+          $bundleName = "singlestore-power-bi-bundle-$connectorVersion-pbi__$driverVersion-odbc.exe"
+          Write-Host "Bundle name: $bundleName"
+          light ".\power-bi-bundle-installer\obj\Bundle.wixobj" -o ".\bin\$bundleName" -ext WixBalExtension
+
+      - name: Upload final bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "power-bi-bundle-${{ env.connector-version }}-pbi__${{ env.driver-version }}-odbc.exe"
+          path: bin\singlestore-power-bi-bundle-*.exe
+
+  # Tier 1: deterministic PQ/PQOut tests over Helpers.pqm. No database, ODBC driver,
+  # credentials, or network access is required by the test execution itself.
+  test:
+    name: Unit tests (Tier 1)
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Build test extension
+        shell: powershell
+        run: msbuild ".\test\SingleStoreODBC.Tests.mproj" -p:Configuration=Release
+
+      - name: Fetch pinned PQTest
+        id: pqtest
+        uses: ./.github/actions/setup-pqtest
+        with:
+          version: ${{ env.pq-sdk-tools-version }}
+
+      - name: Run unit-test battery
+        shell: powershell
+        run: |
+          .\.github\workflows\run_pqtest_battery.ps1 `
+            -PqTestExe "${{ steps.pqtest.outputs.path }}" `
+            -SettingsFile ".\test\Settings\Unit.testsettings.json" `
+            -BatteryName "PQTest unit-test"
+
+      - name: Upload PQTest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: power-query-unit-test-results
+          path: test\TestResults\**
+          if-no-files-found: warn
+
+  # Tier 2: query-folding tests against a real, throwaway S2MS cluster.
+  # NOT run on plain master pushes: the PR that produced the merge already ran it, and the tag run re-checks it.
+  test-folding:
+    name: Query folding (Tier 2)
+    runs-on: windows-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+
+    env:
+      # Single source of truth for the DB name — passed to BOTH s2ms_cluster.py (which creates
+      # and seeds it) and setup_folding_credentials.ps1 (which substitutes it into the parameter
+      # query). They must agree or the `folding_types` navigation fails.
+      DB_NAME: folding_ci
+      S2MS_API_KEY: ${{ secrets.S2MS_API_KEY }}
+      SQL_USER_PASSWORD: ${{ secrets.SQL_USER_PASSWORD }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install SingleStore management client
+        shell: powershell
+        run: python -m pip install singlestoredb
+
+      - name: Fetch ODBC driver installer
+        uses: ./.github/actions/fetch-odbc-driver
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Install ODBC driver
+        shell: powershell
+        run: |
+          # System-wide MSI install registers "SingleStore ODBC Unicode Driver" with the ODBC
+          # Driver Manager, which is what the mashup runtime under PQTest uses to fold.
+          $log = "odbc-install.log"
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList `
+            '/i', 'singlestore-connector-odbc.msi', '/quiet', '/norestart', '/l*v', $log
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log | Write-Host }
+            throw "ODBC driver MSI install failed with exit code $($p.ExitCode)."
+          }
+          Write-Host "ODBC driver installed."
+
+      - name: Build connector
+        shell: powershell
+        run: msbuild ".\SingleStore Direct Query.sln" -p:Configuration=Release
+
+      - name: Fetch pinned PQTest
+        id: pqtest
+        uses: ./.github/actions/setup-pqtest
+        with:
+          version: ${{ env.pq-sdk-tools-version }}
+
+      - name: Start S2MS cluster
+        shell: powershell
+        run: python .github\workflows\s2ms_cluster.py start $env:DB_NAME
+
+      - name: Configure PQTest credentials
+        shell: powershell
+        run: |
+          .\.github\workflows\setup_folding_credentials.ps1 `
+            -PqTestExe "${{ steps.pqtest.outputs.path }}" `
+            -ExtensionPath "bin\Release\SingleStoreODBC.mez" `
+            -ParameterQuery "test\Folding\Connection.parameter.pq" `
+            -Database $env:DB_NAME
+
+      - name: Configure PQTest credentials (Custom SQL)
+        shell: powershell
+        run: |
+          # SingleStoreODBC.Query uses a separate parameter query, and PQTest keys credentials per
+          # (extension, parameter-query path) — so the Custom SQL battery needs its own credential.
+          .\.github\workflows\setup_folding_credentials.ps1 `
+            -PqTestExe "${{ steps.pqtest.outputs.path }}" `
+            -ExtensionPath "bin\Release\SingleStoreODBC.mez" `
+            -ParameterQuery "test\Folding\Connection.CustomSQL.parameter.pq" `
+            -Database $env:DB_NAME
+
+      - name: Run folding battery
+        shell: powershell
+        run: |
+          # Folding is enforced by FailOnFoldingFailure in the settings file.
+          .\.github\workflows\run_pqtest_battery.ps1 `
+            -PqTestExe "${{ steps.pqtest.outputs.path }}" `
+            -SettingsFile ".\test\Settings\Folding.testsettings.json" `
+            -BatteryName "PQTest folding"
+
+      - name: Run non-folding battery
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          # Cases that intentionally do NOT fold (e.g. LIMIT). Separate settings with
+          # FailOnFoldingFailure=false so the expected fold-failure isn't a test failure.
+          .\.github\workflows\run_pqtest_battery.ps1 `
+            -PqTestExe "${{ steps.pqtest.outputs.path }}" `
+            -SettingsFile ".\test\Settings\Folding.NoFold.testsettings.json" `
+            -BatteryName "PQTest non-folding"
+
+      - name: Run custom-SQL battery
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          # SingleStoreODBC.Query custom SQL: a WHERE/ORDER BY layered on top of the native query
+          # must still fold (FailOnFoldingFailure=true), and the trailing ";" in the parameter
+          # query must be stripped or Value.NativeQuery would have errored during setup.
+          .\.github\workflows\run_pqtest_battery.ps1 `
+            -PqTestExe "${{ steps.pqtest.outputs.path }}" `
+            -SettingsFile ".\test\Settings\Folding.CustomSQL.testsettings.json" `
+            -BatteryName "PQTest custom-SQL"
+
+      - name: Terminate S2MS cluster
+        if: always()
+        shell: powershell
+        run: python .github\workflows\s2ms_cluster.py terminate
+
+      - name: Upload folding results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: power-query-folding-test-results
+          path: test\TestResults\**
+          if-no-files-found: warn
+
+  release:
+    name: Publish GitHub Release
+    needs: [build, test, test-folding]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/**/*.exe
+            release-assets/**/*.mez
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            ## SingleStore Direct Query Connector for Power BI — ${{ github.ref_name }}
+
+            | Component | Version |
+            | --- | --- |
+            | Power BI connector | ${{ env.connector-version }} |
+            | SingleStore ODBC driver (bundled) | ${{ needs.build.outputs.driver-version }} |
+            | Bundle installer | ${{ needs.build.outputs.bundle-version }} |
+
+            **Download the `.exe` bundle installer below** — it installs both the SingleStore ODBC
+            driver and the Power BI connector. See the [README](../../blob/master/README.md) for setup,
+            and [RELEASE.md](../../blob/master/RELEASE.md) for how releases are produced.
+
+            > ⚠️ GitHub releases are **not** Microsoft-certified. You must enable custom connectors in
+            > Power BI Desktop (see README → "Enable custom connectors").

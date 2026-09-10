@@ -1,0 +1,3 @@
+#table( type table [distinct_regions = number] , {
+    {3}
+})

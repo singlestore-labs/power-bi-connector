@@ -1,0 +1,85 @@
+// Pure helper functions extracted from SingleStoreODBC.pq so they can be unit-tested in
+// isolation. Loaded via Extension.LoadFunction, exactly like Diagnostics.pqm / OdbcConstants.pqm.
+// Nothing here touches Odbc.DataSource, credentials, or I/O — all logic is deterministic.
+let
+    // Parse "host[:port]" into the connection-string record; default port 3306 when omitted.
+    AddServerAndPort = (baseString as record, serverAddr as text) as record =>
+        let
+            Address = Splitter.SplitTextByDelimiter(":")(serverAddr),
+            Host = Address{0},
+            PortRaw = if List.Count(Address) > 1 then Address{1} else ""
+        in
+            if List.Count(Address) > 2 or Host = ""
+            then
+                error "Invalid server address provided"
+            else
+                let
+                    connStringHost = Record.AddField(baseString, "Server", Host)
+                in
+                    if PortRaw = ""
+                    then
+                        Record.AddField(connStringHost, "Port", 3306)
+                    else
+                        let
+                            Port = Int32.From(PortRaw)
+                        in
+                            if Port = null
+                            then
+                                error "Invalid port value provided"
+                            else
+                                Record.AddField(connStringHost, "Port", Port),
+
+    // Size reported for SingleStore types that have no fixed ODBC size (treated as 65535-char).
+    MaxCharLength = 65535,
+    CharOctetLength = 3,
+
+    // Shorten an ODBC type name (drop the "(N)"/" " suffix), preserving a trailing "unsigned".
+    RenameOdbcType = (t) =>
+        let
+            unsigned = Text.Contains(t, "unsigned"),
+            typeShortened = List.First(Text.SplitAny(t, "( ")),
+            resultType = if unsigned then Text.Combine({typeShortened, "unsigned"}, " ") else typeShortened
+        in
+            resultType,
+
+    // True for SingleStore types whose reported size must be inflated.
+    OdbcTypeNeedsSizeFix = (t) =>
+        if (t = "json" or t = "geographypoint" or t = "geography") then
+            true
+        else false,
+
+    // Rename a SQLColumns row's TYPE_NAME and, for size-less types, inflate its size fields.
+    FixOdbcColumnRow = (row) =>
+        let
+            rowFixedTypeName = Record.TransformFields(row, {{"TYPE_NAME", (value) as text => RenameOdbcType(value)}}),
+            rowFixedSizes = if (OdbcTypeNeedsSizeFix(rowFixedTypeName[TYPE_NAME])) then
+                Record.TransformFields(rowFixedTypeName, {
+                    {"COLUMN_SIZE", (value) => MaxCharLength},
+                    {"BUFFER_LENGTH", (value) => MaxCharLength * CharOctetLength + 1}, // Terminal symbol
+                    {"CHAR_OCTET_LENGTH", (value) => CharOctetLength}
+                }) else rowFixedTypeName
+        in
+            rowFixedSizes,
+
+    // Value.NativeQuery errors on a trailing ";", so strip trailing semicolons before use.
+    StripTrailingSemicolons = (query) => Text.TrimEnd(query, ";"),
+
+    // SSL precedence: an explicit UseSSL option wins; otherwise the credential's EncryptConnection
+    // (which defaults to on when unset).
+    ResolveSsl = (optionsUseSSL, credentialEncrypt) =>
+        if (optionsUseSSL <> null) then
+            optionsUseSSL
+        else
+            if (credentialEncrypt = null or credentialEncrypt = true) then
+                true
+            else
+                false
+in
+    [
+        AddServerAndPort = AddServerAndPort,
+        RenameOdbcType = RenameOdbcType,
+        OdbcTypeNeedsSizeFix = OdbcTypeNeedsSizeFix,
+        FixOdbcColumnRow = FixOdbcColumnRow,
+        StripTrailingSemicolons = StripTrailingSemicolons,
+        ResolveSsl = ResolveSsl
+    ]

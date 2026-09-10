@@ -1,0 +1,30 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30717.126
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "power_bi_bundle_installer", "power_bi_bundle_installer.wixproj", "{5E752819-CB4C-49C9-8A4B-576BAA25C9E1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{0820DE85-06D7-45FF-9B37-5E451B1E58E8}"
+	ProjectSection(SolutionItems) = preProject
+		SingleStore64.png = SingleStore64.png
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5E752819-CB4C-49C9-8A4B-576BAA25C9E1}.Debug|x86.ActiveCfg = Debug|x86
+		{5E752819-CB4C-49C9-8A4B-576BAA25C9E1}.Debug|x86.Build.0 = Debug|x86
+		{5E752819-CB4C-49C9-8A4B-576BAA25C9E1}.Release|x86.ActiveCfg = Release|x86
+		{5E752819-CB4C-49C9-8A4B-576BAA25C9E1}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F8298935-F206-47B3-8B08-F54630386351}
+	EndGlobalSection
+EndGlobal

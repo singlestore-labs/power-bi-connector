@@ -1,0 +1,4 @@
+#table( type table [id = number, note = text] , {
+    {1, "alpha"},
+    {3, "gamma"}
+})

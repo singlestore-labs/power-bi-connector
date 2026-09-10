@@ -1,0 +1,10 @@
+{
+  "ExtensionPaths": [
+    "bin/Release/SingleStoreODBC.mez"
+  ],
+  "QueryFilePath": "test/Folding/CustomSQLCases",
+  "ParameterQueryFilePath": "test/Folding/Connection.CustomSQL.parameter.pq",
+  "FailOnMissingOutputFile": true,
+  "FailOnFoldingFailure": true,
+  "TrxReportPath": "test/TestResults"
+}

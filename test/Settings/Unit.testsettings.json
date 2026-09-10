@@ -1,0 +1,8 @@
+{
+  "ExtensionPaths": [
+    "test/bin/Release/SingleStoreODBC.Tests.mez"
+  ],
+  "QueryFilePath": "test/Queries",
+  "FailOnMissingOutputFile": true,
+  "TrxReportPath": "test/TestResults"
+}

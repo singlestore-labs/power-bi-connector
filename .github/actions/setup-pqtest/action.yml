@@ -1,0 +1,36 @@
+name: Setup PQTest
+description: >
+  Install the pinned Microsoft.PowerQuery.SdkTools NuGet package and locate PQTest.exe.
+
+inputs:
+  version:
+    description: Microsoft.PowerQuery.SdkTools version to install (pinned for reproducibility).
+    required: true
+
+outputs:
+  path:
+    description: Full path to the located PQTest.exe.
+    value: ${{ steps.locate.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - id: locate
+      shell: powershell
+      run: |
+        # PQTest.exe ships inside the Microsoft.PowerQuery.SdkTools NuGet package.
+        nuget install Microsoft.PowerQuery.SdkTools `
+          -Version "${{ inputs.version }}" `
+          -OutputDirectory ".\pqtools" `
+          -ExcludeVersion `
+          -NonInteractive
+
+        $pqtest = Get-ChildItem -Path ".\pqtools" -Recurse -Filter "PQTest.exe" |
+          Select-Object -First 1
+
+        if (-not $pqtest) {
+          throw "PQTest.exe was not found in Microsoft.PowerQuery.SdkTools ${{ inputs.version }}."
+        }
+
+        Write-Host "PQTest: $($pqtest.FullName)"
+        "path=$($pqtest.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

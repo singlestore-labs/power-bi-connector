@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The name of the product -->
+<?define Name = "SingleStore Power BI Connector" ?>
+<!-- The manufacturer, for setup package publisher and folder info -->
+<?define Manufacturer = "SingleStore" ?>
+<!-- The version number of this setup package-->
+<?define Version = "1.1.0" ?>
+<!-- UpgradeCode must be unique and not changed once the first version of the program is installed. -->
+<?define UpgradeCode = "1f4cf55b-85f6-474d-87c8-1f2b8f47e219" ?>
+<!-- The name of the Cabinet -->
+<?define CabName = "SampleApplication.cab" ?>
+<!-- Title for ODBC installation -->
+<?define InstallODBC = "Install ODBC driver" ?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+	<Product Id="*" Name="$(var.Name)" Manufacturer="$(var.Manufacturer)" Version="$(var.Version)" UpgradeCode="$(var.UpgradeCode)" Language="1033">
+		<Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+		<Media Id="1" Cabinet="$(var.CabName)" EmbedCab="yes" />
+
+		<!-- Allow only to install per-user -->
+		<Condition Message="Aborting setup: Unable to install connector for all users.">ALLUSERS</Condition>
+		<Feature Id="ProductFeature" Title="$(var.Name)" Level="1">
+			<ComponentGroupRef Id="MPBIProductComponents" />
+			<ComponentGroupRef Id="PBIProductComponents" />
+			<ComponentRef Id="MPBIRemoveDirs" />
+			<ComponentRef Id="PBIRemoveDirs" />
+		</Feature>
+	</Product>
+
+	<Fragment>
+		<Directory Id="TARGETDIR" Name="SourceDir">
+			<Directory Id="PersonalFolder">
+				<Directory Id="MPBI" Name="Microsoft Power BI Desktop" >
+					<Directory Id="MPBI_INSTALLDIR" Name="Custom Connectors" >
+						<Component Id="MPBIRemoveDirs" Guid="*">
+							<RemoveFolder Id="RemoveCustomConnectorsMPBI" On="uninstall" />
+							<RemoveFolder Id="RemoveMPBI" Directory="MPBI" On="uninstall" />
+							<RegistryValue Root="HKCU" Key="Software\$(var.Manufacturer)\$(var.Name)_MPBI" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+						</Component>
+					</Directory>
+				</Directory>
+				<Directory Id="PBI" Name="Power BI Desktop" >
+					<Directory Id="PBI_INSTALLDIR" Name="Custom Connectors" >
+						<Component Id="PBIRemoveDirs" Guid="*">
+							<RemoveFolder Id="RemoveCustomConnectorsPBI" On="uninstall" />
+							<RemoveFolder Id="RemovePBI" Directory="PBI" On="uninstall" />
+							<RegistryValue Root="HKCU" Key="Software\$(var.Manufacturer)\$(var.Name)_PBI" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+						</Component>
+					</Directory>
+				</Directory>
+			</Directory>
+		</Directory>
+	</Fragment>
+
+	<Fragment>
+		<ComponentGroup Id="MPBIProductComponents" Directory="MPBI_INSTALLDIR">
+			<Component Id="MPBISetup" Guid="16B8739B-2CD5-45D4-A238-C146F9A9A31B">
+				<RegistryValue Root='HKCU' Key='Software\$(var.Manufacturer)\$(var.Name)_MPBI'
+					 Name='InstallFolder'
+					 Value='[INSTALLFOLDER]'
+					 Type='string'
+					 KeyPath='yes' />
+
+				<File Id="single_store_odbc_direct_query_connector_mpbi" DiskId="1"
+					  Source="SingleStoreODBC.mez" />
+			</Component>
+		</ComponentGroup>
+		<ComponentGroup Id="PBIProductComponents" Directory="PBI_INSTALLDIR">
+			<Component Id="PBISetup" Guid="B3C99955-FD7F-47FB-8F84-B0E52E01C465">
+				<RegistryValue Root='HKCU' Key='Software\$(var.Manufacturer)\$(var.Name)_PBI'
+					 Name='InstallFolder'
+					 Value='[INSTALLFOLDER]'
+					 Type='string'
+					 KeyPath='yes' />
+
+				<File Id="single_store_odbc_direct_query_connector_pbi" DiskId="1"
+					  Source="SingleStoreODBC.mez" />
+			</Component>
+		</ComponentGroup>
+	</Fragment>
+
+</Wix>

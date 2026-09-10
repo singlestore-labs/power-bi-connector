@@ -1,0 +1,6 @@
+#table( type table [id = number, region = text, amount = number] , {
+    {2, "US-East", 200.00},
+    {3, "US-West", 300.75},
+    {5, "EU-West", 500.00},
+    {6, "EU-West", 250.50}
+})

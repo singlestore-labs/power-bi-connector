@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30717.126
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{4DF76451-A46A-4C0B-BE03-459FAAFA07E6}") = "SinglestoreODBC", "SingleStoreODBC.mproj", "{DF2808A0-DADF-4AD0-862D-F006B4912CFD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{4EA199AF-8831-410B-80DC-A5335CFAE8D5}"
+	ProjectSection(SolutionItems) = preProject
+		SqlODBC80.png = SqlODBC80.png
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Debug|x64.ActiveCfg = Debug|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Debug|x64.Build.0 = Debug|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Debug|x86.ActiveCfg = Debug|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Debug|x86.Build.0 = Debug|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Release|x64.ActiveCfg = Release|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Release|x64.Build.0 = Release|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Release|x86.ActiveCfg = Release|x86
+		{DF2808A0-DADF-4AD0-862D-F006B4912CFD}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DDA3DEB2-916D-4413-B871-2CFC3CBA9F57}
+	EndGlobalSection
+EndGlobal

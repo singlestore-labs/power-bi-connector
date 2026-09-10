@@ -1,0 +1,5 @@
+#table( type table [region = text, total_amount = number, row_count = number] , {
+    {"EU-West", 750.5, 2},
+    {"US-East", 200, 1},
+    {"US-West", 300.75, 1}
+})

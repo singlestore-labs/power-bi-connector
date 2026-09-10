@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The name of the product -->
+<?define Name = "SingleStore Power BI Bundle" ?>
+<!-- The manufacturer, for setup package publisher and folder info -->
+<?define Manufacturer = "SingleStore" ?>
+<!-- The bundle's OWN version, independent of the connector/driver versions it chains.
+     Bump this on EVERY release (including a driver-only refresh), so Windows sees a new
+     bundle and upgrade detection fires. Must be MSI-safe: major<=255, minor<=255, build<=65535.
+     Component versions are visible separately in Add/Remove Programs and in the .exe filename.
+
+     Reset to a clean 2.0.0 baseline: earlier releases drifted (up to 1.1.0), so 2.0.0 is a
+     round starting point that is still strictly greater than anything shipped, keeping Burn's
+     upgrade detection intact. Never drop below the highest version already released. -->
+<?define Version = "2.0.0" ?>
+<!-- UpgradeCode must be unique and not changed once the first version of the program is installed. -->
+<?define UpgradeCode = "5e752819-cb4c-49c9-8a4b-576baa25c9e1" ?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+	 xmlns:bal="http://schemas.microsoft.com/wix/BalExtension">
+	<Bundle Name="$(var.Name)" Manufacturer="$(var.Manufacturer)" Version="$(var.Version)" UpgradeCode="$(var.UpgradeCode)" >
+		<BootstrapperApplicationRef Id="WixStandardBootstrapperApplication.HyperlinkLicense">
+			<bal:WixStandardBootstrapperApplication LicenseUrl="" SuppressOptionsUI="yes" LogoFile="SingleStore64.png"/>
+		</BootstrapperApplicationRef>
+
+		<Chain>
+			<!-- Visible="yes" keeps each chained MSI in Add/Remove Programs with its own
+			     DisplayVersion, so support can see the ODBC driver and connector versions
+			     separately (not just the bundle version). -->
+			<MsiPackage SourceFile="singlestore-connector-odbc.msi" Visible="yes" />
+			<MsiPackage SourceFile="power_bi_connector_installer.msi" Visible="yes" />
+		</Chain>
+	</Bundle>
+</Wix>
