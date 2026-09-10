@@ -1,5 +1,4 @@
 business_justification: >
-  A short reason this belongs in the open, confirming it contains no proprietary
-  SingleStore information.
+  A driver, confirming it contains no proprietary SingleStore information.
 license: Apache-2.0
 primary_contact: okramarenko
