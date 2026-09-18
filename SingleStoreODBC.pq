@@ -151,15 +151,10 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
         // handled here as an example. 
         //
         Credential = Extension.CurrentCredential(),
-		CredentialConnectionString =
-            if Credential[AuthenticationKind]? = "UsernamePassword" then
-                // set connection string parameters used for basic authentication
-                [ UID = Credential[Username], PWD = Credential[Password] ]
-            else if (Credential[AuthenticationKind]? = "Windows") then
-                // set connection string parameters used for windows/kerberos authentication
-                [ Trusted_Connection="Yes" ]
-            else
-                error Error.Record("Error", "Unhandled authentication kind: " & Credential[AuthenticationKind]?),
+        // Map the active credential to the CredentialConnectionString. The per-auth-kind logic
+        // (basic UID/PWD, Windows Trusted_Connection, access-token JWT=) lives in a pure,
+        // unit-tested helper so it can be exercised without live ODBC connection.
+        CredentialConnectionString = Helpers[BuildCredentialConnectionString](Credential),
 
         // It's here to ensure compatibility with first implementation of SSL functionality
         // if options has "UseSSL" and it's not null, use that; otherwise default to null
@@ -169,7 +164,12 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             else
                 null,
 
-        SSL = Helpers[ResolveSsl](useSSL, Credential[EncryptConnection]?),
+        // Resolve SSL from the UseSSL option / EncryptConnection, but force it on for the
+        // access-token (JWT) path — SingleStore JWT users are created REQUIRE SSL, so a user who
+        // disabled encryption would otherwise hit a confusing connection failure.
+        SSL =
+            Helpers[ResolveSsl](useSSL, Credential[EncryptConnection]?)
+            or Helpers[TokenAuthRequiresSsl](Credential[AuthenticationKind]?),
 
         //
         // Configuration options for the call to Odbc.DataSource
@@ -392,7 +392,13 @@ SingleStoreODBC = [
     // Set supported types of authentication
     Authentication = [
         Windows = [],
-        UsernamePassword = []
+        UsernamePassword = [],
+        // "Access token" auth: the user pastes a SingleStore access token (a JWT). It is emitted as
+        // the ODBC driver's dedicated JWT= connection property — see Helpers[BuildCredentialConnectionString].
+        Key = [
+            Label = Extension.LoadString("JwtAuthLabel"),
+            KeyLabel = Extension.LoadString("JwtKeyLabel")
+        ]
     ],
 
     // Enable Encryption

@@ -7,7 +7,7 @@ The connector supports:
 - **DirectQuery and Import** storage modes.
 - **Native Query** with query folding enabled.
 - **SSL/TLS** encrypted connections.
-- **Username/Password** and **Windows** authentication.
+- **Username/Password**, **Windows**, and **Access token (JWT)** authentication.
 
 ## Prerequisites
 
@@ -48,12 +48,28 @@ Restart Power BI Desktop.
    - **Database** — the database to connect to.
    - **Data Connectivity mode** — **Import** or **DirectQuery**.
    - **Native query** (optional) — a read-only SQL query to ingest data directly. DDL is not supported.
-3. In the left pane choose **Basic** (username/password) — SingleStore Helios supports **Basic** only — or **Windows** authentication, then **Connect**.
+3. In the left pane choose an authentication method, then **Connect**:
+   - **Basic** (username/password) — SingleStore Helios supports **Basic** only.
+   - **Windows** authentication.
+   - **Access token (JWT)** — paste a SingleStore access token instead of a password (see below).
 4. Choose tables in the **Navigator** (or confirm your native-query preview), then **Load**, or **Transform Data** to edit first.
 
 To change saved credentials later: **File → Options and settings → Data source settings →** select the connector **→ Edit Permissions**.
 
 > 📖 Full walkthrough with screenshots: [Connect Power BI Desktop to SingleStore](https://docs.singlestore.com/cloud/query-data/connect-with-analytics-and-bi-tools/connect-with-power-bi/connect-power-bi-desktop-to-singlestore/).
+
+### Access token (JWT) authentication
+
+If your SingleStore instance is configured for [JWT authentication](https://docs.singlestore.com/cloud/security/database-access/authenticate-via-jwt/) (users created `IDENTIFIED WITH authentication_jwt`), you can connect with an access token instead of a password:
+
+1. In the sign-in dialog, choose **Access token (JWT)**.
+2. Paste your JWT into the **Access token** field and **Connect**.
+
+Notes:
+
+- The token is passed to the driver's dedicated `JWT=` connection property — not the password field. You do **not** enter a username: the server resolves it from the token's claims (this maps to the SingleStore CLI's `-u '*'`).
+- JWT users are created `REQUIRE SSL`, so the connector **always encrypts** this connection regardless of the **Use SSL** option.
+- The token is used as-is; the connector does not acquire or refresh it. When it expires, edit the saved credential (**Data source settings → Edit Permissions**) and paste a fresh token.
 
 ## Power BI Service (on-premises data gateway)
 
@@ -64,6 +80,8 @@ To refresh reports in the Power BI Service, connect through an [on-premises data
 3. Add a **New data source** with **Data source type = SingleStore database**, fill in **Server** and **Database**, choose **Basic** authentication (Helios supports Basic only), and add it. Use **Skip Test Connection** if a test error blocks you.
 
 The connector exposes a `TestConnection` handler so the gateway can validate credentials.
+
+> **Access token (JWT) on the gateway:** the connector uses the pasted token as-is and does not refresh it, so scheduled refresh will fail once the token expires. Re-enter a fresh token on the gateway data source before it lapses, or use Basic authentication for unattended refresh.
 
 > 📖 Full walkthrough with screenshots: [Connect Power BI Service to SingleStore via the Power BI gateway](https://docs.singlestore.com/cloud/query-data/connect-with-analytics-and-bi-tools/connect-with-power-bi/connect-power-bi-service-to-singlestore-via-power-bi-gateway/).
 
