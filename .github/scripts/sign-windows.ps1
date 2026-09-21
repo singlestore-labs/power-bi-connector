@@ -27,7 +27,7 @@ if (-not $signTool)
 }
 if (-not (Test-Path $signTool))
 {
-    throw "Sign CLI not found, install it with 'dotnet tool install -g --prerelease sign'"
+    throw "Sign CLI not found, install it with 'dotnet tool install -g sign --version <pinned version from config.yml>'"
 }
 
 $missing = $Files | Where-Object { -not (Test-Path $_) }
