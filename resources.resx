@@ -138,6 +138,15 @@
   <data name="DriverName" xml:space="preserve">
     <value>SingleStore ODBC Unicode Driver</value>
   </data>
+    <data name="JwtAuthLabel" xml:space="preserve">
+    <value>Access token (JWT)</value>
+  </data>
+  <data name="JwtKeyLabel" xml:space="preserve">
+    <value>Access token</value>
+  </data>
+  <data name="OAuthLabel" xml:space="preserve">
+    <value>Single sign-on (OIDC)</value>
+  </data>
   <data name="JwtAuthLabel" xml:space="preserve">
     <value>Access token (JWT)</value>
   </data>
