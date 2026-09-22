@@ -81,8 +81,15 @@ let
     // is spelled out here so every supported auth kind lives in one testable place.
     //   UsernamePassword -> UID/PWD (basic auth)
     //   Windows          -> Trusted_Connection (Windows/Kerberos)
+<<<<<<< HEAD
     //   Key              -> JWT= only (SingleStore JWT/access-token auth; no UID — the server
     //                       resolves the username from the token's claims)
+=======
+    //   Key              -> UID="*" + JWT= (SingleStore JWT: user pastes an access token)
+    //   OAuth            -> UID="*" + JWT= (SingleStore JWT: token obtained via the OAuth sign-in flow)
+    // Key and OAuth are the same injection (dedicated JWT= property, UID="*" so the server resolves
+    // the user from the token claims); they differ only in how the token is acquired.
+>>>>>>> a76316c (feat: add OAuth SSO authentication)
     BuildCredentialConnectionString = (credential as record) as record =>
         let
             authKind = credential[AuthenticationKind]?
@@ -92,13 +99,80 @@ let
             else if authKind = "Windows" then
                 [ Trusted_Connection = "Yes" ]
             else if authKind = "Key" then
+<<<<<<< HEAD
                 [ JWT = credential[Key] ]
+=======
+                [ UID = "*", JWT = credential[Key] ]
+            else if authKind = "OAuth" then
+                [ UID = "*", JWT = credential[access_token] ]
+>>>>>>> a76316c (feat: add OAuth SSO authentication)
             else
                 error Error.Record("Error", "Unhandled authentication kind: " & authKind),
 
-    // SingleStore access-token (JWT) users are created REQUIRE SSL, so the Key auth path mandates
-    // encryption regardless of the UseSSL option or the credential's EncryptConnection.
-    TokenAuthRequiresSsl = (authKind) as logical => authKind = "Key"
+    // SingleStore JWT users are created REQUIRE SSL, so the token-based auth paths (Key and OAuth)
+    // mandate encryption regardless of the UseSSL option or the credential's EncryptConnection.
+    TokenAuthRequiresSsl = (authKind) as logical => authKind = "Key" or authKind = "OAuth",
+
+    // --- OAuth / OIDC PKCE helpers (pure; the random verifier, SHA-256 hashing and Web.Contents
+    // calls stay in SingleStoreODBC.pq — everything deterministic around them lives here) ---
+
+    // RFC 4648 §5 base64url: standard base64, drop "=" padding, "+"->"-", "/"->"_".
+    // Used to encode the PKCE code_challenge = base64url(SHA256(code_verifier)).
+    Base64UrlEncode = (data as binary) as text =>
+        let
+            base64 = Binary.ToText(data, BinaryEncoding.Base64),
+            noPadding = Text.BeforeDelimiter(base64, "="),
+            urlSafe = Text.Replace(Text.Replace(noPadding, "+", "-"), "/", "_")
+        in
+            urlSafe,
+
+    // Extract the code / state / error query parameters from the OAuth redirect callback URI.
+    ParseAuthorizeCallback = (callbackUri as text) as record =>
+        let
+            query = Uri.Parts(callbackUri)[Query]
+        in
+            [
+                code = Record.FieldOrDefault(query, "code", null),
+                state = Record.FieldOrDefault(query, "state", null),
+                error = Record.FieldOrDefault(query, "error", null)
+            ],
+
+    // Assemble the form body for the token endpoint POST. One shape serves both grants: the code
+    // is sent as "code" for authorization_code and as "refresh_token" otherwise; code_verifier is
+    // included only when supplied (present for the initial exchange, absent on refresh).
+    BuildTokenRequestQuery = (clientId as text, redirectUri as text, grantType as text, code as text, optional verifier as nullable text) as record =>
+        let
+            codeVerifier = if verifier <> null then [ code_verifier = verifier ] else [],
+            codeParameter = if grantType = "authorization_code" then [ code = code ] else [ refresh_token = code ]
+        in
+            [ client_id = clientId, grant_type = grantType, redirect_uri = redirectUri ] & codeParameter & codeVerifier,
+
+    // Read the authorize/token endpoints out of a parsed OIDC discovery document
+    // (<issuer>/.well-known/openid-configuration). Errors if either endpoint is missing.
+    ParseOidcDiscovery = (doc as record) as record =>
+        let
+            authorize = Record.FieldOrDefault(doc, "authorization_endpoint", null),
+            token = Record.FieldOrDefault(doc, "token_endpoint", null)
+        in
+            if authorize = null or token = null then
+                error Error.Record("Error", "OIDC discovery document missing authorization_endpoint or token_endpoint")
+            else
+                [ authorize = authorize, token = token ],
+
+    // Shape a parsed token-endpoint response into the credential record Power BI persists. An
+    // "error" field maps to a clean error; otherwise the JWT SingleStore accepts is the OAuth
+    // access_token (see §0c: the SingleStore OIDC provider issues an access-token-shaped JWT).
+    // refresh_token / expires_in ride along in the record (Power BI keeps them in Properties).
+    SelectTokenFields = (body as record) as record =>
+        if Record.HasFields(body, "error") then
+            error Error.Record(body[error], Record.FieldOrDefault(body, "error_description", null), body)
+        else
+            [
+                access_token = Record.FieldOrDefault(body, "access_token", null),
+                refresh_token = Record.FieldOrDefault(body, "refresh_token", null),
+                expires_in = Record.FieldOrDefault(body, "expires_in", null),
+                token_type = Record.FieldOrDefault(body, "token_type", null)
+            ]
 in
     [
         AddServerAndPort = AddServerAndPort,
@@ -108,5 +182,10 @@ in
         StripTrailingSemicolons = StripTrailingSemicolons,
         ResolveSsl = ResolveSsl,
         BuildCredentialConnectionString = BuildCredentialConnectionString,
-        TokenAuthRequiresSsl = TokenAuthRequiresSsl
+        TokenAuthRequiresSsl = TokenAuthRequiresSsl,
+        Base64UrlEncode = Base64UrlEncode,
+        ParseAuthorizeCallback = ParseAuthorizeCallback,
+        BuildTokenRequestQuery = BuildTokenRequestQuery,
+        ParseOidcDiscovery = ParseOidcDiscovery,
+        SelectTokenFields = SelectTokenFields
     ]
