@@ -16,11 +16,6 @@ inputs:
     required: false
     default: singlestore-connector-odbc.msi
 
-outputs:
-  driver-version:
-    description: Version of the downloaded MSI, as confirmed from the asset name.
-    value: ${{ steps.fetch.outputs.driver-version }}
-
 runs:
   using: composite
   steps:
@@ -40,9 +35,17 @@ runs:
         $version = $env:DRIVER_VERSION
         if (-not $version) { throw "The 'version' input is required." }
 
-        $releaseInfo = Invoke-RestMethod `
-          -Headers $headers `
-          -Uri "https://api.github.com/repos/memsql/singlestore-odbc-connector/releases/tags/v$version"
+        $tag = "v$version"
+        try {
+          $releaseInfo = Invoke-RestMethod `
+            -Headers $headers `
+            -Uri "https://api.github.com/repos/memsql/singlestore-odbc-connector/releases/tags/$tag"
+        } catch {
+          # Without this the failure is a bare "(404) Not Found" that names neither the tag nor the
+          # pinned version. A 404 here almost always means the pin points at a release that does
+          # not exist (yet), or has a stray "v" prefix.
+          throw "Release tag '$tag' not found in memsql/singlestore-odbc-connector (is odbc-driver-version '$version' correct?). $($_.Exception.Message)"
+        }
 
         # The asset is named singlestore-connector-odbc-<version>-win64.msi. Match on the exact
         # name rather than a wildcard so a mislabelled or extra asset can never be picked up.
@@ -55,7 +58,5 @@ runs:
 
         Write-Host "Release: $($releaseInfo.tag_name) ($($releaseInfo.html_url))"
         Write-Host "Asset:   $($asset.name) ($($asset.size) bytes, updated $($asset.updated_at))"
-        Write-Host "ODBC driver version: $version"
-        "driver-version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
         Invoke-WebRequest -URI $asset.browser_download_url -OutFile "${{ inputs.output-file }}"

@@ -16,10 +16,11 @@ if (-not (Test-Path $Bundle))
 {
     throw "Bundle not found: $Bundle"
 }
-$insignia   = Join-Path $WixBin "insignia.exe"
-$signScript = Join-Path $PSScriptRoot "sign-windows.ps1"
-$bundlePath = (Resolve-Path $Bundle).Path
-$engine     = Join-Path (Split-Path $bundlePath -Parent) "burn-engine.exe"
+$insignia     = Join-Path $WixBin "insignia.exe"
+$signScript   = Join-Path $PSScriptRoot "sign-windows.ps1"
+$verifyScript = Join-Path $PSScriptRoot "verify-signature.ps1"
+$bundlePath   = (Resolve-Path $Bundle).Path
+$engine       = Join-Path (Split-Path $bundlePath -Parent) "burn-engine.exe"
 
 Write-Host "Detaching Burn engine from $bundlePath"
 & $insignia -ib $bundlePath -o $engine
@@ -29,6 +30,10 @@ if ($LASTEXITCODE -ne 0)
 }
 
 & $signScript -Files $engine
+# The engine is the only part of the bundle that is verified here: once reattached it is no longer a
+# standalone file, and the final verify step in CI only sees the outer bundle signature. Burn copies
+# the engine out on its own and elevates it, so an untimestamped engine signature would still ship.
+& $verifyScript -Files $engine
 
 Write-Host "Reattaching signed engine"
 & $insignia -ab $engine $bundlePath -o $bundlePath

@@ -36,15 +36,11 @@ jobs:
     name: Fetch & verify ODBC driver
     runs-on: windows-latest
 
-    outputs:
-      driver-version: ${{ steps.driver.outputs.driver-version }}
-
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
       - name: Fetch ODBC driver installer
-        id: driver
         uses: ./.github/actions/fetch-odbc-driver
         with:
           github-token: ${{ github.token }}
@@ -66,13 +62,8 @@ jobs:
     needs: [odbc-driver]
     runs-on: windows-latest
 
-    env:
-      driver-version: ${{ needs.odbc-driver.outputs.driver-version }}
-
-    # Exposed so downstream jobs can name versions without re-deriving them. driver-version is
-    # re-exported here so `sign` and `release` only need `build`, not `odbc-driver` directly.
+    # Exposed so the release job can name the bundle version in the release notes without re-deriving it
     outputs:
-      driver-version: ${{ needs.odbc-driver.outputs.driver-version }}
       bundle-version: ${{ steps.bundle-version.outputs.bundle-version }}
 
     steps:
@@ -135,14 +126,14 @@ jobs:
       - name: Build bundle installer (unsigned, for PR/master validation)
         shell: powershell
         # Env var names contain hyphens, so they must be accessed with ${env:...} brace syntax.
-        run: .\.github\scripts\build-bundle.ps1 -ConnectorVersion ${env:connector-version} -DriverVersion ${env:driver-version}
+        run: .\.github\scripts\build-bundle.ps1 -ConnectorVersion ${env:connector-version} -DriverVersion ${env:odbc-driver-version}
 
       - name: Upload unsigned bundle artifact
         uses: actions/upload-artifact@v4
         with:
           # Deliberately not named like the signed one: the release job downloads by exact
           # artifact name, so an unsigned bundle can never reach a GitHub Release.
-          name: "unsigned-bundle-${{ env.connector-version }}-pbi__${{ env.driver-version }}-odbc"
+          name: "unsigned-bundle-${{ env.connector-version }}-pbi__${{ env.odbc-driver-version }}-odbc"
           path: bin\singlestore-power-bi-bundle-*.exe
           if-no-files-found: error
 
@@ -337,7 +328,6 @@ jobs:
       id-token: write
 
     env:
-      driver-version: ${{ needs.build.outputs.driver-version }}
       AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
       AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
       AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
@@ -396,7 +386,7 @@ jobs:
       - name: Build bundle from signed MSIs
         id: bundle
         shell: powershell
-        run: .\.github\scripts\build-bundle.ps1 -ConnectorVersion ${env:connector-version} -DriverVersion ${env:driver-version}
+        run: .\.github\scripts\build-bundle.ps1 -ConnectorVersion ${env:connector-version} -DriverVersion ${env:odbc-driver-version}
 
       - name: Sign Burn engine and bundle
         shell: powershell
@@ -453,7 +443,7 @@ jobs:
             | Component | Version |
             | --- | --- |
             | Power BI connector | ${{ env.connector-version }} |
-            | SingleStore ODBC driver (bundled) | ${{ needs.build.outputs.driver-version }} |
+            | SingleStore ODBC driver (bundled) | ${{ env.odbc-driver-version }} |
             | Bundle installer | ${{ needs.build.outputs.bundle-version }} |
 
             **Download the `.exe` bundle installer below** — it installs both the SingleStore ODBC
