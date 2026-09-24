@@ -67,7 +67,7 @@ If your SingleStore instance is configured for [JWT authentication](https://docs
 
 Notes:
 
-- The token is passed to the driver's dedicated `JWT=` connection property — not the password field. You do **not** enter a username: the server resolves it from the token's claims (this maps to the SingleStore CLI's `-u '*'`).
+- The token is passed to the driver's dedicated `JWT=` connection property — not the password field. You do **not** enter a username and the connector sends none: the server resolves it from the token's claims.
 - JWT users are created `REQUIRE SSL`, so the connector **always encrypts** this connection regardless of the **Use SSL** option.
 - The token is used as-is; the connector does not acquire or refresh it. When it expires, edit the saved credential (**Data source settings → Edit Permissions**) and paste a fresh token.
 

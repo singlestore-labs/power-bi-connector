@@ -1,8 +1,8 @@
 // Pins the credential -> CredentialConnectionString mapping used by GetODBCDataSource.
 // Each auth kind maps to a specific set of ODBC connection-string fields:
-//   UsernamePassword -> UID/PWD, Windows -> Trusted_Connection, Key (access token) -> UID="*"+JWT.
-// The Key case emits the token via the driver's dedicated JWT= property (not PWD) and uses the
-// "*" username sentinel so the server resolves the user from the token's claims.
+//   UsernamePassword -> UID/PWD, Windows -> Trusted_Connection, Key (access token) -> JWT only.
+// The Key case emits the token via the driver's dedicated JWT= property (not PWD) and sends no
+// UID at all: the server resolves the user from the token's claims.
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,
@@ -18,8 +18,8 @@ let
             () => H[BuildCredentialConnectionString]([ AuthenticationKind = "Windows" ])
         ),
         Assert[Equal](
-            "Key maps the access token to UID=* + JWT=",
-            [ UID = "*", JWT = "the.jwt.token" ],
+            "Key maps the access token to JWT= only (no UID)",
+            [ JWT = "the.jwt.token" ],
             () => H[BuildCredentialConnectionString]([ AuthenticationKind = "Key", Key = "the.jwt.token" ])
         ),
         Assert[ErrorMessage](
