@@ -73,7 +73,32 @@ let
             if (credentialEncrypt = null or credentialEncrypt = true) then
                 true
             else
-                false
+                false,
+
+    // Map the active credential (from Extension.CurrentCredential()) to the ODBC
+    // CredentialConnectionString record. Pure: takes the credential record, returns the
+    // connection-string fields. Odbc.DataSource handles UsernamePassword automatically, but it
+    // is spelled out here so every supported auth kind lives in one testable place.
+    //   UsernamePassword -> UID/PWD (basic auth)
+    //   Windows          -> Trusted_Connection (Windows/Kerberos)
+    //   Key              -> JWT= only (SingleStore JWT/access-token auth; no UID — the server
+    //                       resolves the username from the token's claims)
+    BuildCredentialConnectionString = (credential as record) as record =>
+        let
+            authKind = credential[AuthenticationKind]?
+        in
+            if authKind = "UsernamePassword" then
+                [ UID = credential[Username], PWD = credential[Password] ]
+            else if authKind = "Windows" then
+                [ Trusted_Connection = "Yes" ]
+            else if authKind = "Key" then
+                [ JWT = credential[Key] ]
+            else
+                error Error.Record("Error", "Unhandled authentication kind: " & authKind),
+
+    // SingleStore access-token (JWT) users are created REQUIRE SSL, so the Key auth path mandates
+    // encryption regardless of the UseSSL option or the credential's EncryptConnection.
+    TokenAuthRequiresSsl = (authKind) as logical => authKind = "Key"
 in
     [
         AddServerAndPort = AddServerAndPort,
@@ -81,5 +106,7 @@ in
         OdbcTypeNeedsSizeFix = OdbcTypeNeedsSizeFix,
         FixOdbcColumnRow = FixOdbcColumnRow,
         StripTrailingSemicolons = StripTrailingSemicolons,
-        ResolveSsl = ResolveSsl
+        ResolveSsl = ResolveSsl,
+        BuildCredentialConnectionString = BuildCredentialConnectionString,
+        TokenAuthRequiresSsl = TokenAuthRequiresSsl
     ]
