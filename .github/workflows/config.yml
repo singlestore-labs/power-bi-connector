@@ -7,24 +7,58 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      sign:
+        description: Run the signing job (dry run, nothing is published)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 env:
   connector-version: 1.1.0
+  # Exact SingleStore ODBC driver release that is tested, embedded, signed and shipped.
+  odbc-driver-version: 1.2.2
   # Pin the SDK test harness so test behavior does not change unexpectedly between runs.
   pq-sdk-tools-version: 2.155.2
 
 jobs:
-  build:
-    name: Build connector & installers
+  # Fetched exactly once. Every other job downloads this artifact, so the driver bytes that are
+  # tested, embedded and shipped are the same file.
+  odbc-driver:
+    name: Fetch & verify ODBC driver
     runs-on: windows-latest
 
-    # Exposed so the release job can name versions in the release notes without re-deriving them
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Fetch ODBC driver installer
+        uses: ./.github/actions/fetch-odbc-driver
+        with:
+          github-token: ${{ github.token }}
+          version: ${{ env.odbc-driver-version }}
+
+      - name: Verify ODBC driver MSI is signed by SingleStore
+        shell: powershell
+        run: .\.github\scripts\verify-signature.ps1 -Files singlestore-connector-odbc.msi
+
+      - name: Upload ODBC driver artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: odbc-driver
+          path: singlestore-connector-odbc.msi
+          if-no-files-found: error
+
+  build:
+    name: Build connector & installers
+    needs: [odbc-driver]
+    runs-on: windows-latest
+
+    # Exposed so the release job can name the bundle version in the release notes without re-deriving it
     outputs:
-      driver-version: ${{ steps.driver.outputs.driver-version }}
-      bundle-version: ${{ steps.bundle.outputs.bundle-version }}
+      bundle-version: ${{ steps.bundle-version.outputs.bundle-version }}
 
     steps:
       - name: Check out code
@@ -37,14 +71,14 @@ jobs:
         shell: powershell
         run: choco install -y -r --no-progress wixtoolset
 
-      - name: Fetch ODBC driver installer
-        id: driver
-        uses: ./.github/actions/fetch-odbc-driver
+      - name: Download ODBC driver installer
+        uses: actions/download-artifact@v4
         with:
-          github-token: ${{ github.token }}
+          name: odbc-driver
+          # lands singlestore-connector-odbc.msi in the repo root, where Bundle.wxs expects it
 
       - name: Read bundle version
-        id: bundle
+        id: bundle-version
         shell: bash
         run: |
           # The bundle version is tracked independently of the connector/driver versions.
@@ -76,31 +110,26 @@ jobs:
           candle ".\power-bi-connector-installer\Power BI Connector.wxs" -o .\power-bi-connector-installer\obj\
           light ".\power-bi-connector-installer\obj\*.wixobj" -o .\power_bi_connector_installer.msi
 
-      - name: Upload connector installer artifact
+      - name: Upload connector installer artifact (unsigned)
         uses: actions/upload-artifact@v4
         with:
-          name: power_bi_connector_installer.msi
+          name: connector-msi
           path: power_bi_connector_installer.msi
+          if-no-files-found: error
 
-      - name: Build bundle installer
+      - name: Build bundle installer (unsigned, for PR/master validation)
         shell: powershell
-        run: |
-          New-Alias -Name candle -Value "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle"
-          New-Alias -Name light -Value "C:\Program Files (x86)\WiX Toolset v3.14\bin\light"
-          candle ".\power-bi-bundle-installer\Bundle.wxs" -o ".\power-bi-bundle-installer\obj\" -ext WixBalExtension
-          # Env var names contain hyphens, so they must be accessed with ${env:...} brace syntax.
-          # The .exe suffix carries both component versions so a downloaded file self-identifies.
-          $connectorVersion = ${env:connector-version}
-          $driverVersion = ${env:driver-version}
-          $bundleName = "singlestore-power-bi-bundle-$connectorVersion-pbi__$driverVersion-odbc.exe"
-          Write-Host "Bundle name: $bundleName"
-          light ".\power-bi-bundle-installer\obj\Bundle.wixobj" -o ".\bin\$bundleName" -ext WixBalExtension
+        # Env var names contain hyphens, so they must be accessed with ${env:...} brace syntax.
+        run: .\.github\scripts\build-bundle.ps1 -ConnectorVersion ${env:connector-version} -DriverVersion ${env:odbc-driver-version}
 
-      - name: Upload final bundle artifact
+      - name: Upload unsigned bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "power-bi-bundle-${{ env.connector-version }}-pbi__${{ env.driver-version }}-odbc.exe"
+          # Deliberately not named like the signed one: the release job downloads by exact
+          # artifact name, so an unsigned bundle can never reach a GitHub Release.
+          name: "unsigned-bundle-${{ env.connector-version }}-pbi__${{ env.odbc-driver-version }}-odbc"
           path: bin\singlestore-power-bi-bundle-*.exe
+          if-no-files-found: error
 
   # Tier 1: deterministic PQ/PQOut tests over Helpers.pqm. No database, ODBC driver,
   # credentials, or network access is required by the test execution itself.
@@ -145,6 +174,7 @@ jobs:
   # NOT run on plain master pushes: the PR that produced the merge already ran it, and the tag run re-checks it.
   test-folding:
     name: Query folding (Tier 2)
+    needs: [odbc-driver]
     runs-on: windows-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -175,10 +205,10 @@ jobs:
         shell: powershell
         run: python -m pip install singlestoredb
 
-      - name: Fetch ODBC driver installer
-        uses: ./.github/actions/fetch-odbc-driver
+      - name: Download ODBC driver installer
+        uses: actions/download-artifact@v4
         with:
-          github-token: ${{ github.token }}
+          name: odbc-driver
 
       - name: Install ODBC driver
         shell: powershell
@@ -273,26 +303,136 @@ jobs:
           path: test\TestResults\**
           if-no-files-found: warn
 
+  # Signs the connector MSI, then builds the bundle from the signed MSIs and signs the Burn engine
+  # and the bundle itself. Runs only after every test tier is green, so a SingleStore signature
+  # always means the exact artifact passed release validation.
+  #
+  # Signing is gated to tags and explicit manual dry runs so PR builds never get id-token: write.
+  sign:
+    name: Sign installers (Azure Artifact Signing)
+    needs: [build, test, test-folding]
+    if: >-
+      (startsWith(github.ref, 'refs/tags/v')) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref_type == 'branch' &&
+        github.ref_name == 'master' &&
+        inputs.sign
+      )
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install WiX Toolset
+        shell: powershell
+        run: choco install -y -r --no-progress wixtoolset
+
+      - name: Download connector installer (unsigned)
+        uses: actions/download-artifact@v4
+        with:
+          name: connector-msi
+
+      - name: Download ODBC driver installer
+        uses: actions/download-artifact@v4
+        with:
+          name: odbc-driver
+
+      - name: Print OIDC subject (for the Entra federated credential)
+        shell: bash
+        run: |
+          # Prints only the `sub` claim of this job's OIDC token, never the token itself. An Entra
+          # federated credential must match this value (exactly, or via a flexible credential
+          # wildcard on the ref part). This repo uses GitHub's immutable subject format
+          # (owner@id/repo@id), so read it from here instead of deriving it by hand.
+          token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r '.value')
+          payload=$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+')
+          pad=$(( (4 - ${#payload} % 4) % 4 ))
+          payload="$payload$(printf '%*s' "$pad" '' | tr ' ' '=')"
+          printf '%s' "$payload" | base64 -d | jq -r '
+            "OIDC sub:            " + .sub,
+            "ref:                 " + .ref,
+            "repository_id:       " + .repository_id,
+            "repository_owner_id: " + .repository_owner_id'
+
+      - name: Azure login (OIDC, no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Install Microsoft's unified Sign tool, used by the build to sign the MSI and its contents
+      - name: Install .NET Sign CLI
+        shell: powershell
+        run: dotnet tool install -g --prerelease sign
+
+      - name: Sign connector MSI
+        shell: powershell
+        run: .\.github\scripts\sign-windows.ps1 -Files power_bi_connector_installer.msi
+
+      - name: Build bundle from signed MSIs
+        id: bundle
+        shell: powershell
+        run: .\.github\scripts\build-bundle.ps1 -ConnectorVersion ${env:connector-version} -DriverVersion ${env:odbc-driver-version}
+
+      - name: Sign Burn engine and bundle
+        shell: powershell
+        run: .\.github\scripts\sign-bundle.ps1 -Bundle "${{ steps.bundle.outputs.bundle-path }}"
+
+      - name: Verify signatures on everything we ship
+        shell: powershell
+        run: |
+          .\.github\scripts\verify-signature.ps1 -Files `
+            power_bi_connector_installer.msi, `
+            singlestore-connector-odbc.msi, `
+            "${{ steps.bundle.outputs.bundle-path }}"
+
+      - name: Upload signed bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-bundle
+          path: bin\singlestore-power-bi-bundle-*.exe
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: [build, test, test-folding]
+    needs: [build, sign]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Download build artifacts
+      # Downloaded by exact artifact name: the unsigned bundle from `build` must never be published.
+      - name: Download signed bundle
         uses: actions/download-artifact@v4
         with:
+          name: signed-bundle
+          path: release-assets
+
+      - name: Download connector .mez (Microsoft handoff artifact)
+        uses: actions/download-artifact@v4
+        with:
+          name: SingleStoreODBC.mez
           path: release-assets
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/**/*.exe
-            release-assets/**/*.mez
+            release-assets/singlestore-power-bi-bundle-*.exe
+            release-assets/SingleStoreODBC.mez
           fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
@@ -301,12 +441,14 @@ jobs:
             | Component | Version |
             | --- | --- |
             | Power BI connector | ${{ env.connector-version }} |
-            | SingleStore ODBC driver (bundled) | ${{ needs.build.outputs.driver-version }} |
+            | SingleStore ODBC driver (bundled) | ${{ env.odbc-driver-version }} |
             | Bundle installer | ${{ needs.build.outputs.bundle-version }} |
 
             **Download the `.exe` bundle installer below** — it installs both the SingleStore ODBC
-            driver and the Power BI connector. See the [README](../../blob/master/README.md) for setup,
+            driver and the Power BI connector. The installer and the MSIs inside it are digitally
+            signed by SingleStore, Inc. See the [README](../../blob/master/README.md) for setup,
             and [RELEASE.md](../../blob/master/RELEASE.md) for how releases are produced.
 
-            > ⚠️ GitHub releases are **not** Microsoft-certified. You must enable custom connectors in
-            > Power BI Desktop (see README → "Enable custom connectors").
+            > ⚠️ The Power BI connector itself (`SingleStoreODBC.mez`) is **not** Microsoft-certified
+            > and is an unsigned custom connector. You must enable custom connectors in Power BI
+            > Desktop (see README → "Enable custom connectors").

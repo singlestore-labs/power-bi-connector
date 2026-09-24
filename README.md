@@ -30,7 +30,7 @@ We publish new versions on the [Releases](../../releases) page ahead of Microsof
 
 **Bundle installer** — a single `.exe` that installs **both** the SingleStore ODBC driver **and** the Power BI connector.
 
-> **⚠️ Not Microsoft-certified.** GitHub releases have **not** been reviewed or signed by Microsoft, even though they pass Microsoft's required connector test suite. Because they are unsigned custom connectors, you must **enable custom connectors** (below) — and Power BI enforces this **every time** you use a connector that isn't a built-in one.
+> **⚠️ Not Microsoft-certified.** GitHub releases have **not** been reviewed or certified by Microsoft, even though they pass Microsoft's required connector test suite. The bundle installer (`.exe`) and the MSIs inside it **are digitally signed by SingleStore, Inc.**, so Windows shows SingleStore as the verified publisher when you run it. The connector itself (`SingleStoreODBC.mez`) is an **unsigned custom connector**, which is why Power BI Desktop only loads it after you **enable custom connectors** (below).
 
 ### Enable custom connectors (Option B only)
 
@@ -81,7 +81,7 @@ Development, building, and testing require **Windows** (the Power Query SDK, MSB
 
    Output: `bin\Release\SingleStoreODBC.mez`.
 
-CI (GitHub Actions, on Windows) fetches the latest SingleStore ODBC driver, builds the `.mez`, and produces the connector `.msi` and the bundle `.exe` on every push. Pushing a version tag (`v*`) additionally publishes a GitHub Release with the bundle installer attached. See [`RELEASE.md`](RELEASE.md) for how releases are produced and how the `.mez` is handed off to Microsoft for the built-in connector.
+CI (GitHub Actions, on Windows) fetches the pinned SingleStore ODBC driver release, builds the `.mez`, and produces the connector `.msi` and the bundle `.exe` on every push. Pushing a version tag (`v*`) additionally signs the installers with Azure Artifact Signing and publishes a GitHub Release with the signed bundle attached. See [`RELEASE.md`](RELEASE.md) for how releases are produced and signed, and how the `.mez` is handed off to Microsoft for the built-in connector.
 
 ## Behavior notes
 
