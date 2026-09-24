@@ -22,10 +22,6 @@ env:
   odbc-driver-version: 1.2.2
   # Pin the SDK test harness so test behavior does not change unexpectedly between runs.
   pq-sdk-tools-version: 2.155.2
-  # .NET Sign CLI (https://github.com/dotnet/sign). It has no stable release; the 1.x versions on
-  # NuGet under the same id are an unrelated, unlisted package. Pinned so a signing run is
-  # reproducible; bump deliberately.
-  sign-cli-version: 0.9.1-beta.26431.1
 
 jobs:
   # Fetched exactly once. Every other job downloads this artifact, so the driver bytes that are
