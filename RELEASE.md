@@ -37,6 +37,8 @@ The workflow refuses to publish if the ODBC driver MSI is not signed by SingleSt
 
 ## Signing
 
+Windows release artifacts are signed via Azure Artifact Signing (Trusted Signing) using Workload Identity Federation.
+
 ### What is signed
 
 | Artifact | Signed by | How |
@@ -46,63 +48,21 @@ The workflow refuses to publish if the ODBC driver MSI is not signed by SingleSt
 | `singlestore-connector-odbc.msi` (embedded in the bundle) | SingleStore, Inc. | Signed upstream by the ODBC driver's own release pipeline. CI **verifies** it and never re-signs it. |
 | `SingleStoreODBC.mez` | nobody | Not signed. It is a custom connector; Power BI Desktop loads it only with custom connectors enabled. This is also the Microsoft handoff artifact. |
 
-Windows therefore shows *Verified publisher: Singlestore, Inc.* when the bundle runs, but the connector remains an unsigned custom connector inside Power BI. Signing the `.mez` (as a `.pqx`) would need a long-lived code-signing certificate whose private key SingleStore controls; Artifact Signing does not provide that (its certificates rotate daily) and is out of scope here.
+### Required GitHub Actions secrets
 
-### How it works
-
-- Signing uses the same Azure Artifact Signing account, certificate profile and Entra App Registration as the SingleStore ODBC driver repo, with the same variable and secret names. `.github/scripts/sign-windows.ps1` is a copy of the ODBC repo's script.
-- The `sign` job runs only for `v*` tags and for manual dry runs (`Run workflow` with `sign` ticked). It runs after `build`, `test` and `test-folding`, so a signature always means the exact artifact passed release validation. Pull request builds never get `id-token: write` or the Azure secrets.
-- The ODBC MSI is verified as soon as it is downloaded, in the `odbc-driver` job that every other job depends on. Order inside `sign`: sign the connector MSI → build the bundle from the signed MSIs (`build-bundle.ps1`) → detach the Burn engine, sign it, verify it, reattach it, sign the bundle (`sign-bundle.ps1`) → verify the connector MSI, the ODBC MSI and the bundle (`verify-signature.ps1`, which runs both `Get-AuthenticodeSignature` and `signtool verify /pa /all /v`).
-- Every signature is timestamped (`http://timestamp.acs.microsoft.com`). Artifact Signing leaf certificates are valid for 72 hours, so an untimestamped signature would stop validating within days; verification fails if the timestamp is missing.
-- Azure authentication is OIDC via a federated identity credential on the App Registration. No client secret is stored anywhere.
-- The .NET Sign CLI is pinned (`sign-cli-version` in `config.yml`). It has no stable release; do not install it unpinned.
-
-### One-time setup
-
-**GitHub (repository settings)**
-
-- Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — the App Registration used for signing (same values as the ODBC repo).
-- Variables: `AZURE_SIGNING_ENDPOINT` (e.g. `https://eus.codesigning.azure.net`), `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`.
-
-**Entra (needs rights on the App Registration)**
-
-The App Registration must hold the *Artifact Signing Certificate Profile Signer* role on the certificate profile (already the case if it is the ODBC repo's app) and must trust this repo's GitHub OIDC tokens through a federated identity credential.
-
-This repository was created after 15 July 2026, so GitHub issues OIDC subjects in the **immutable format** that includes owner and repository IDs:
-
-```
-repo:singlestore-labs@79943160/power-bi-connector@1363583999:ref:refs/tags/v1.1.0
-```
-
-A name-only pattern such as `repo:singlestore-labs/power-bi-connector:...` never matches. The subject also changes per ref, so use Entra *flexible* federated identity credentials (claims-matching expressions, portal or Microsoft Graph only) rather than an exact subject. One credential per pattern; the expression language has no `or`:
-
-| Purpose | Expression |
+| Secret | Description |
 | --- | --- |
-| Release tags | `claims['sub'] matches 'repo:singlestore-labs@79943160/power-bi-connector@1363583999:ref:refs/tags/v*' and claims['repository_owner_id'] eq '79943160'` |
-| Manual dry runs from `master` (optional) | `claims['sub'] matches 'repo:singlestore-labs@79943160/power-bi-connector@1363583999:ref:refs/heads/master' and claims['repository_owner_id'] eq '79943160'` |
+| `AZURE_CLIENT_ID` | Application (client) ID of `github-singlestore-signing` |
+| `AZURE_TENANT_ID` | Directory (tenant) ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID used for signing |
 
-Issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`. The `sign` job prints the exact subject it presents (step *Print OIDC subject*) before logging in, so a failed login always shows what the credential has to match. If the repo is moved or renamed the IDs stay the same but the names in the subject change; update the expressions.
+### Required GitHub Actions variables
 
-The branch credential is what allows anyone with write access to produce a signed dry run from that branch, so keep it pinned to a single branch name and delete it if dry runs are not needed.
-
-### Dry run
-
-Actions → *PowerBI Connector CI* → *Run workflow*, pick the branch, tick `sign`. The `release` job does not run (not a tag), so nothing is published. Download the `signed-bundle` artifact and check it:
-
-- Windows: `Get-AuthenticodeSignature .\singlestore-power-bi-bundle-*.exe` must be `Valid` with signer `Singlestore, Inc.` and a timestamp. Extract the engine with `insignia -ib <bundle> -o engine.exe` and check it the same way. Running the installer must show *Verified publisher: Singlestore, Inc.* in the UAC prompt.
-- Linux/macOS: `osslsigncode verify -in <bundle>` (it may warn that the Microsoft root is not in the local trust store; that is about local trust, not the signature).
-
-### Troubleshooting
-
-| Symptom | Cause |
+| Variable | Example value |
 | --- | --- |
-| `azure/login` → `AADSTS7002131` "No matching federated identity record found" | The credential's expression does not match the printed subject: missing `@id` parts, wrong ref, or no credential for this ref type |
-| `azure/login` → `AADSTS700016` | Wrong `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` |
-| Sign CLI → 403 / Forbidden | App Registration lacks *Artifact Signing Certificate Profile Signer* on this profile, or wrong endpoint/account/profile variables |
-| Sign CLI → no matching certificate profile | `AZURE_SIGNING_PROFILE` typo or profile disabled |
-| `verify-signature.ps1` fails on the ODBC MSI in the `odbc-driver` job | Upstream published an unsigned or differently signed driver build. Stop the release and raise it in the ODBC repo |
-| `verify-signature.ps1` → valid but `NOT timestamped` | Timestamp server unreachable; re-run, never ship untimestamped |
-| `fetch-odbc-driver` → asset not found | `odbc-driver-version` does not match an existing release tag/asset name |
+| `AZURE_SIGNING_ENDPOINT` | `https://eus.codesigning.azure.net` |
+| `AZURE_SIGNING_ACCOUNT`  | `SingleStore` |
+| `AZURE_SIGNING_PROFILE`  | `ConnectorsReleaseProfile` |
 
 ## Updating the built-in connector (Microsoft)
 

@@ -1,8 +1,6 @@
 name: Fetch ODBC driver
 description: >
-  Download a specific SingleStore ODBC driver win64 MSI from the memsql/singlestore-odbc-connector releases.
-  The version is pinned by the caller so a release tag fully defines the driver bytes that are tested,
-  signed and shipped; `latest` is never resolved at build time.
+  Download a specific SingleStore ODBC driver win64 MSI from the memsql/singlestore-odbc-connector releases. The version is pinned by the caller so a release tag fully defines the driver bytes that are tested, signed and shipped; `latest` is never resolved at build time.
 
 inputs:
   github-token:
@@ -41,9 +39,6 @@ runs:
             -Headers $headers `
             -Uri "https://api.github.com/repos/memsql/singlestore-odbc-connector/releases/tags/$tag"
         } catch {
-          # Without this the failure is a bare "(404) Not Found" that names neither the tag nor the
-          # pinned version. A 404 here almost always means the pin points at a release that does
-          # not exist (yet), or has a stray "v" prefix.
           throw "Release tag '$tag' not found in memsql/singlestore-odbc-connector (is odbc-driver-version '$version' correct?). $($_.Exception.Message)"
         }
 

@@ -5,6 +5,7 @@
 # last. Anything changed inside the bundle after signing invalidates the outer signature, which
 # is why the MSIs must already be signed before the bundle is built (see build-bundle.ps1).
 # See https://wixtoolset.org/docs/v3/overview/insignia/
+# https://docs.firegiant.com/wix/tools/signing/#signing-bundles
 param(
     [Parameter(Mandatory = $true)] [string]$Bundle,
     [string]$WixBin = "C:\Program Files (x86)\WiX Toolset v3.14\bin"

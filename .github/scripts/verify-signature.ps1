@@ -3,8 +3,7 @@
 #   1. Get-AuthenticodeSignature (status, signer, timestamp), with the certificate details logged.
 #   2. signtool verify /pa /all /v from the Windows SDK, which walks every signature in the file.
 #
-# Used in CI for the upstream ODBC driver MSI (must already be signed by SingleStore before we
-# embed it; we never re-sign someone else's artifact) and for our own outputs after signing.
+# Used in CI for the upstream ODBC driver MSI and for our own outputs after signing.
 #
 # The leaf certificate thumbprint is logged but deliberately NOT enforced: Azure Artifact Signing
 # rotates leaf certificates daily, so only the subject and chain validity are stable.

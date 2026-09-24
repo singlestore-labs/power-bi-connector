@@ -34,7 +34,7 @@ We publish new versions on the [Releases](../../releases) page ahead of Microsof
 
 ### Enable custom connectors (Option B only)
 
-Required for the unsigned `.mez` shipped with GitHub releases:
+Required whenever you use a non-built-in connector:
 
 **File → Options and settings → Options → Security → Data Extensions → *(Not recommended) Allow any extension to load without validation or warning*.**
 

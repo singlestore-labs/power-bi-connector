@@ -1,9 +1,7 @@
 # Signs Windows artifacts with Azure Artifact Signing (Trusted Signing).
 # Expects an Azure login (see the `sign` job in .github/workflows/config.yml) and the .NET Sign CLI
 # to be available.
-#
-# Copied from memsql/singlestore-odbc-connector (.github/scripts/sign-windows.ps1) so both
-# SingleStore installers are signed the same way, with the same account and certificate profile.
+
 param(
     [Parameter(Mandatory = $true)]
     [string[]]$Files

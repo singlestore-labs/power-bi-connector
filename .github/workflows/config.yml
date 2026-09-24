@@ -18,9 +18,7 @@ permissions:
 
 env:
   connector-version: 1.1.0
-  # Exact SingleStore ODBC driver release that is tested, embedded, signed and shipped. Bumped
-  # deliberately (see RELEASE.md); `latest` is never resolved at build time so a tag fully defines
-  # the release bytes.
+  # Exact SingleStore ODBC driver release that is tested, embedded, signed and shipped.
   odbc-driver-version: 1.2.2
   # Pin the SDK test harness so test behavior does not change unexpectedly between runs.
   pq-sdk-tools-version: 2.155.2
@@ -31,7 +29,7 @@ env:
 
 jobs:
   # Fetched exactly once. Every other job downloads this artifact, so the driver bytes that are
-  # tested, embedded and shipped are the same file, and an unsigned upstream build fails fast.
+  # tested, embedded and shipped are the same file.
   odbc-driver:
     name: Fetch & verify ODBC driver
     runs-on: windows-latest
@@ -314,14 +312,17 @@ jobs:
   # always means the exact artifact passed release validation.
   #
   # Signing is gated to tags and explicit manual dry runs so PR builds never get id-token: write.
-  # The OIDC subject differs per ref (refs/tags/v1.2.3, refs/heads/master, ...), so the Entra
-  # federated credentials use wildcard (flexible) matching on the subject, as the ODBC repo does.
   sign:
     name: Sign installers (Azure Artifact Signing)
     needs: [build, test, test-folding]
     if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.sign)
+      (startsWith(github.ref, 'refs/tags/v')) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref_type == 'branch' &&
+        github.ref_name == 'master' &&
+        inputs.sign
+      )
     runs-on: windows-latest
     permissions:
       contents: read
@@ -369,15 +370,16 @@ jobs:
             "repository_owner_id: " + .repository_owner_id'
 
       - name: Azure login (OIDC, no client secret)
-        uses: azure/login@2035af27c2cea8ff426397d10e3edb28906b51df # v2.3.1
+        uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # Install Microsoft's unified Sign tool, used by the build to sign the MSI and its contents
       - name: Install .NET Sign CLI
         shell: powershell
-        run: dotnet tool install -g sign --version ${env:sign-cli-version}
+        run: dotnet tool install -g --prerelease sign
 
       - name: Sign connector MSI
         shell: powershell
@@ -430,7 +432,7 @@ jobs:
           path: release-assets
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             release-assets/singlestore-power-bi-bundle-*.exe
