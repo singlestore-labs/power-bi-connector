@@ -1,15 +1,9 @@
 // Pins the credential -> CredentialConnectionString mapping used by GetODBCDataSource.
 // Each auth kind maps to a specific set of ODBC connection-string fields:
-<<<<<<< HEAD
-//   UsernamePassword -> UID/PWD, Windows -> Trusted_Connection, Key (access token) -> JWT only.
-// The Key case emits the token via the driver's dedicated JWT= property (not PWD) and sends no
-// UID at all: the server resolves the user from the token's claims.
-=======
-//   UsernamePassword -> UID/PWD, Windows -> Trusted_Connection, Key/OAuth (access token) -> UID="*"+JWT.
-// The token cases emit the token via the driver's dedicated JWT= property (not PWD) and use the
-// "*" username sentinel so the server resolves the user from the token's claims. Key reads the pasted
-// token from [Key]; OAuth reads the flow-obtained token from [access_token].
->>>>>>> a76316c (feat: add OAuth SSO authentication)
+//   UsernamePassword -> UID/PWD, Windows -> Trusted_Connection, Key/OAuth (access token) -> JWT only.
+// The token cases emit the token via the driver's dedicated JWT= property (not PWD) and send no
+// UID at all: the server resolves the user from the token's claims. Key reads the pasted token
+// from [Key]; OAuth reads the flow-obtained token from [access_token].
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,
@@ -30,8 +24,8 @@ let
             () => H[BuildCredentialConnectionString]([ AuthenticationKind = "Key", Key = "the.jwt.token" ])
         ),
         Assert[Equal](
-            "OAuth maps the access_token to UID=* + JWT=",
-            [ UID = "*", JWT = "the.oauth.token" ],
+            "OAuth maps the access_token to JWT= only (no UID)",
+            [ JWT = "the.oauth.token" ],
             () => H[BuildCredentialConnectionString]([ AuthenticationKind = "OAuth", access_token = "the.oauth.token" ])
         ),
         Assert[ErrorMessage](

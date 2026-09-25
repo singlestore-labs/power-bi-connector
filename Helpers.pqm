@@ -81,15 +81,10 @@ let
     // is spelled out here so every supported auth kind lives in one testable place.
     //   UsernamePassword -> UID/PWD (basic auth)
     //   Windows          -> Trusted_Connection (Windows/Kerberos)
-<<<<<<< HEAD
-    //   Key              -> JWT= only (SingleStore JWT/access-token auth; no UID — the server
-    //                       resolves the username from the token's claims)
-=======
-    //   Key              -> UID="*" + JWT= (SingleStore JWT: user pastes an access token)
-    //   OAuth            -> UID="*" + JWT= (SingleStore JWT: token obtained via the OAuth sign-in flow)
-    // Key and OAuth are the same injection (dedicated JWT= property, UID="*" so the server resolves
-    // the user from the token claims); they differ only in how the token is acquired.
->>>>>>> a76316c (feat: add OAuth SSO authentication)
+    //   Key              -> JWT= only (SingleStore JWT: user pastes an access token)
+    //   OAuth            -> JWT= only (SingleStore JWT: token obtained via the OAuth sign-in flow)
+    // Key and OAuth are the same injection (dedicated JWT= property, no UID — the server resolves
+    // the username from the token's claims); they differ only in how the token is acquired.
     BuildCredentialConnectionString = (credential as record) as record =>
         let
             authKind = credential[AuthenticationKind]?
@@ -99,13 +94,9 @@ let
             else if authKind = "Windows" then
                 [ Trusted_Connection = "Yes" ]
             else if authKind = "Key" then
-<<<<<<< HEAD
                 [ JWT = credential[Key] ]
-=======
-                [ UID = "*", JWT = credential[Key] ]
             else if authKind = "OAuth" then
-                [ UID = "*", JWT = credential[access_token] ]
->>>>>>> a76316c (feat: add OAuth SSO authentication)
+                [ JWT = credential[access_token] ]
             else
                 error Error.Record("Error", "Unhandled authentication kind: " & authKind),
 
