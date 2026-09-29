@@ -456,22 +456,25 @@ FinishLogin = (context, callbackUri, state) =>
         else
             TokenMethod(callback[code], "authorization_code", context);
 
-// Power BI calls this with the stored refresh_token once the access token has expired.
 Refresh = (resourceUrl, refresh_token) => TokenMethod(refresh_token, "refresh_token");
 
 // One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
 TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
     let
         query = Helpers[BuildTokenRequestQuery](Config_OAuthClientId, OAuthRedirectUri, grantType, code, verifier),
-        response = Web.Contents(OidcEndpoints()[token], [
-            Content = Text.ToBinary(Uri.BuildQueryString(query)),
-            Headers = [
-                #"Content-type" = "application/x-www-form-urlencoded",
-                #"Accept" = "application/json"
-            ],
-            // IdPs answer a rejected grant with 400/401 plus a JSON body; read it instead of failing on status.
-            ManualStatusHandling = {400, 401}
-        ]),
+        response = Web.Contents(
+            OidcEndpoints()[token],
+            [
+                Content = Text.ToBinary(Uri.BuildQueryString(query)),
+                Headers = [
+                    #"Content-type" = "application/x-www-form-urlencoded",
+                    #"Accept" = "application/json"
+                ],
+                // IdPs answer a rejected grant with 400/401 (RFC 6749 §5.2) plus a JSON body; some (e.g. Auth0) use 403
+                // for invalid_grant. Read the body instead of failing on status so the IdP's error reaches the user.
+                ManualStatusHandling = {400, 401, 403}
+            ]
+        ),
         body = Json.Document(response)
     in
         Helpers[SelectTokenFields](body);
