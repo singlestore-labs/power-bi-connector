@@ -104,11 +104,8 @@ let
     // mandate encryption regardless of the UseSSL option or the credential's EncryptConnection.
     TokenAuthRequiresSsl = (authKind) as logical => authKind = "Key" or authKind = "OAuth",
 
-    // --- OAuth / OIDC PKCE helpers (pure; the random verifier, SHA-256 hashing and Web.Contents
-    // calls stay in SingleStoreODBC.pq — everything deterministic around them lives here) ---
+    // --- OAuth / OIDC PKCE helpers ---
 
-    // RFC 4648 §5 base64url: standard base64, drop "=" padding, "+"->"-", "/"->"_".
-    // Used to encode the PKCE code_challenge = base64url(SHA256(code_verifier)).
     Base64UrlEncode = (data as binary) as text =>
         let
             base64 = Binary.ToText(data, BinaryEncoding.Base64),
@@ -133,8 +130,8 @@ let
     // included only when supplied (present for the initial exchange, absent on refresh).
     BuildTokenRequestQuery = (clientId as text, redirectUri as text, grantType as text, code as text, optional verifier as nullable text) as record =>
         let
-            codeVerifier = if verifier <> null then [ code_verifier = verifier ] else [],
-            codeParameter = if grantType = "authorization_code" then [ code = code ] else [ refresh_token = code ]
+            codeVerifier = if (verifier <> null) then [ code_verifier = verifier ] else [],
+            codeParameter = if (grantType = "authorization_code") then [ code = code ] else [ refresh_token = code ]
         in
             [ client_id = clientId, grant_type = grantType, redirect_uri = redirectUri ] & codeParameter & codeVerifier,
 
