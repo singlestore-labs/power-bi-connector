@@ -470,8 +470,6 @@ TokenMethod = (code as text, grantType as text, optional verifier as nullable te
                     #"Content-type" = "application/x-www-form-urlencoded",
                     #"Accept" = "application/json"
                 ],
-                // IdPs answer a rejected grant with 400/401 (RFC 6749 §5.2) plus a JSON body; some (e.g. Auth0) use 403
-                // for invalid_grant. Read the body instead of failing on status so the IdP's error reaches the user.
                 ManualStatusHandling = {400, 401, 403}
             ]
         ),

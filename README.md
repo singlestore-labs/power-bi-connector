@@ -7,7 +7,7 @@ The connector supports:
 - **DirectQuery and Import** storage modes.
 - **Native Query** with query folding enabled.
 - **SSL/TLS** encrypted connections.
-- **Username/Password**, **Windows**, **Access token (JWT)**, and **Single sign-on (OIDC)** authentication.
+- **Username/Password**, **Windows**, and **Access token (JWT)**, and **Single sign-on (OIDC)** authentication.
 
 ## Prerequisites
 
@@ -137,3 +137,5 @@ A few connector behaviors are worth knowing up front:
 ## License
 
 See [`LICENSE`](LICENSE).
+
+Attention: The code in this repository is intended for experimental use only and is not fully tested, documented, or supported by SingleStore. Visit the SingleStore Forums to ask questions about this repository.
