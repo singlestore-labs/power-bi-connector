@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 env:
-  connector-version: 1.1.0
+  connector-version: 1.2.0
   # Exact SingleStore ODBC driver release that is tested, embedded, signed and shipped.
   odbc-driver-version: 1.2.2
   # Pin the SDK test harness so test behavior does not change unexpectedly between runs.
