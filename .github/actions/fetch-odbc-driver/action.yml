@@ -1,20 +1,18 @@
 name: Fetch ODBC driver
 description: >
-  Download the latest SingleStore ODBC driver win64 MSI from the memsql/singlestore-odbc-connector releases and report its version.
+  Download a specific SingleStore ODBC driver win64 MSI from the memsql/singlestore-odbc-connector releases. The version is pinned by the caller so a release tag fully defines the driver bytes that are tested, signed and shipped; `latest` is never resolved at build time.
 
 inputs:
   github-token:
     description: Token used for the GitHub API release lookup.
     required: true
+  version:
+    description: ODBC driver version to download, without the leading "v" (e.g. 1.2.2).
+    required: true
   output-file:
     description: Path the downloaded MSI is written to (keep the default name; the bundle wxs references it).
     required: false
     default: singlestore-connector-odbc.msi
-
-outputs:
-  driver-version:
-    description: Version parsed from the MSI asset name (falls back to the release tag).
-    value: ${{ steps.fetch.outputs.driver-version }}
 
 runs:
   using: composite
@@ -23,6 +21,7 @@ runs:
       shell: powershell
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        DRIVER_VERSION: ${{ inputs.version }}
       run: |
         $headers = @{
           Accept = "application/vnd.github+json"
@@ -31,28 +30,28 @@ runs:
           "User-Agent" = "singlestore-power-bi-connector-ci"
         }
 
-        $releaseInfo = Invoke-RestMethod `
-          -Headers $headers `
-          -Uri "https://api.github.com/repos/memsql/singlestore-odbc-connector/releases/latest"
+        $version = $env:DRIVER_VERSION
+        if (-not $version) { throw "The 'version' input is required." }
 
-        $asset = $releaseInfo.assets.where({ $_.browser_download_url -like "*win64.msi" })[0]
-        if (-not $asset) {
-          throw "No *win64.msi asset found in latest singlestore-odbc-connector release ($($releaseInfo.tag_name))."
+        $tag = "v$version"
+        try {
+          $releaseInfo = Invoke-RestMethod `
+            -Headers $headers `
+            -Uri "https://api.github.com/repos/memsql/singlestore-odbc-connector/releases/tags/$tag"
+        } catch {
+          throw "Release tag '$tag' not found in memsql/singlestore-odbc-connector (is odbc-driver-version '$version' correct?). $($_.Exception.Message)"
         }
 
-        $releaseUrl = $asset.browser_download_url
-        # The asset is named singlestore-connector-odbc-<version>-win64.msi; capture <version>.
-        # -match sets $Matches only on a real match, so the tag_name fallback fires when the
-        # filename doesn't follow the expected pattern (a plain -replace would return the whole
-        # name unchanged, which is non-empty and would silently mask the mismatch).
-        if ($asset.name -match 'odbc-(.*)-win64\.msi') { $driverVersion = $Matches[1] }
-        else { $driverVersion = ($releaseInfo.tag_name -replace '^v', '') }
-        Write-Host "Release download URL: $releaseUrl"
-        Write-Host "ODBC driver version: $driverVersion"
+        # The asset is named singlestore-connector-odbc-<version>-win64.msi. Match on the exact
+        # name rather than a wildcard so a mislabelled or extra asset can never be picked up.
+        $expectedName = "singlestore-connector-odbc-$version-win64.msi"
+        $asset = $releaseInfo.assets.where({ $_.name -eq $expectedName })[0]
+        if (-not $asset) {
+          $names = ($releaseInfo.assets | ForEach-Object { $_.name }) -join ', '
+          throw "Asset '$expectedName' not found in singlestore-odbc-connector release $($releaseInfo.tag_name). Assets: $names"
+        }
 
-        # Publish the version as both a step output (for the job `outputs:` mapping) and a job
-        # env var (so ${{ env.driver-version }} keeps resolving in later build steps unchanged).
-        "driver-version=$driverVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-        "driver-version=$driverVersion" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Write-Host "Release: $($releaseInfo.tag_name) ($($releaseInfo.html_url))"
+        Write-Host "Asset:   $($asset.name) ($($asset.size) bytes, updated $($asset.updated_at))"
 
-        Invoke-WebRequest -URI $releaseUrl -OutFile "${{ inputs.output-file }}"
+        Invoke-WebRequest -URI $asset.browser_download_url -OutFile "${{ inputs.output-file }}"
