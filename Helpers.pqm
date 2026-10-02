@@ -147,12 +147,7 @@ let
             else
                 [ authorize = authorize, token = token ],
 
-    // Turn a parsed token-endpoint response into the credential record Power BI persists. An
-    // "error" body (RFC 6749 §5.2: error + error_description) becomes a clean M error carrying the
-    // IdP's own wording. A success body is returned unchanged: Power BI reads access_token and
-    // refresh_token itself and keeps every other field (expires_in, id_token, scope, ...) in the
-    // credential's Properties, so nothing is dropped and no absent field is turned into a null.
-    // The one thing checked is that access_token is present, since it is the JWT injected as JWT=.
+    // Turn a parsed token-endpoint response into the credential record Power BI persists.
     SelectTokenFields = (body as record) as record =>
         if Record.HasFields(body, "error") then
             error Error.Record(body[error], Record.FieldOrDefault(body, "error_description", null), body)

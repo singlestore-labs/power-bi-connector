@@ -410,8 +410,6 @@ shared SingleStoreODBC.Query = Value.ReplaceType(SingleStoreConnectorImplCustomS
 // Modeled on Microsoft's official PKCESample.pq. The user signs in at the IdP in a browser popup;
 // the IdP redirects back with a one-time code, which TokenMethod exchanges for the JWT that
 // GetODBCDataSource injects as JWT= (see Helpers[BuildCredentialConnectionString], OAuth branch).
-// The deterministic pieces live in Helpers.pqm and are unit-tested; only the random verifier, the
-// SHA-256 hash and the HTTP calls live here.
 
 // Resolve the authorize/token endpoints from the issuer's OIDC discovery document.
 OidcEndpoints = () as record =>
@@ -426,15 +424,20 @@ StartLogin = (resourceUrl, state, display) =>
         // PKCE: a fresh random verifier per sign-in; only its SHA-256 hash travels in the URL.
         codeVerifier = Text.NewGuid() & Text.NewGuid(),
         codeChallenge = Helpers[Base64UrlEncode](Crypto.CreateHash(CryptoAlgorithm.SHA256, Text.ToBinary(codeVerifier))),
-        authorizeUrl = OidcEndpoints()[authorize] & "?" & Uri.BuildQueryString([
-            client_id = Config_OAuthClientId,
-            response_type = "code",
-            scope = Config_OAuthScope,
-            code_challenge_method = OAuthCodeChallengeMethod,
-            code_challenge = codeChallenge,
-            state = state,
-            redirect_uri = OAuthRedirectUri
-        ])
+
+        authorizeUrl = OidcEndpoints()[authorize]
+            & "?"
+            & Uri.BuildQueryString(
+                [
+                    client_id = Config_OAuthClientId,
+                    response_type = "code",
+                    scope = Config_OAuthScope,
+                    code_challenge_method = OAuthCodeChallengeMethod,
+                    code_challenge = codeChallenge,
+                    state = state,
+                    redirect_uri = OAuthRedirectUri
+                ]
+            )
     in
         [
             LoginUri = authorizeUrl,
@@ -449,9 +452,9 @@ FinishLogin = (context, callbackUri, state) =>
     let
         callback = Helpers[ParseAuthorizeCallback](callbackUri)
     in
-        if callback[error] <> null then
+        if (callback[error] <> null) then
             error Error.Record(callback[error], "Sign-in was not completed: " & callback[error], callback)
-        else if callback[code] = null then
+        else if (callback[code] = null) then
             error Error.Record("Error", "Sign-in callback did not include an authorization code", callback)
         else
             TokenMethod(callback[code], "authorization_code", context);
