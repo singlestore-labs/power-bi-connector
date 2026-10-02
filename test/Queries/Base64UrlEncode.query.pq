@@ -1,7 +1,5 @@
-// Pins the RFC 4648 §5 base64url encoding used to build the PKCE code_challenge. It is standardAdd a comment on  lines R1 to R5Add diff commentMarkdown input:  edit mode selected.WritePreviewAdd a suggestionHeadingBold(control b) control⌃ bBItalic(control i) control⌃ iIQuote(control shift right angle bracket) control⌃ shift⇧ right angle bracket>Code(control e) control⌃ eELink(control k) control⌃ kKUnordered list(control 8) control⌃ 88Numbered list(control shift ampersand) control⌃ shift⇧ ampersand&Task list(control shift l) control⌃ shift⇧ lLMentionReferenceSlash commandsMore itemsSaved repliesAdd FilesPaste, drop, or click to add filesCancelCommentStart a review
+// Pins the RFC 4648 §5 base64url encoding used to build the PKCE code_challenge. It is standard
 // base64 with the "=" padding removed and the two URL-unsafe characters remapped ("+"->"-", "/"->"_").
-// Byte vector {251,239,255} standard-encodes to "++//", exercising both remaps; the short inputs
-// exercise 0/1/2 padding characters being stripped.
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,
