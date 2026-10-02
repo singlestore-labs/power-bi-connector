@@ -7,7 +7,7 @@ The connector supports:
 - **DirectQuery and Import** storage modes.
 - **Native Query** with query folding enabled.
 - **SSL/TLS** encrypted connections.
-- **Username/Password**, **Windows**, and **Access token (JWT)** authentication.
+- **Username/Password**, **Windows**, and **Access token (JWT)**, and **Single sign-on (OIDC)** authentication.
 
 ## Prerequisites
 
@@ -52,6 +52,7 @@ Restart Power BI Desktop.
    - **Basic** (username/password) — SingleStore Helios supports **Basic** only.
    - **Windows** authentication.
    - **Access token (JWT)** — paste a SingleStore access token instead of a password (see below).
+   - **Single sign-on (OIDC)** — sign in to SingleStore in a browser popup; the connector obtains the JWT for you (see below).
 4. Choose tables in the **Navigator** (or confirm your native-query preview), then **Load**, or **Transform Data** to edit first.
 
 To change saved credentials later: **File → Options and settings → Data source settings →** select the connector **→ Edit Permissions**.
@@ -71,6 +72,21 @@ Notes:
 - JWT users are created `REQUIRE SSL`, so the connector **always encrypts** this connection regardless of the **Use SSL** option.
 - The token is used as-is; the connector does not acquire or refresh it. When it expires, edit the saved credential (**Data source settings → Edit Permissions**) and paste a fresh token.
 
+### Single sign-on (OIDC) authentication
+
+Instead of pasting a token, you can let the connector obtain it for you through the SingleStore identity provider:
+
+1. In the sign-in dialog, choose **Single sign-on (OIDC)** and click **Sign in**.
+2. Sign in to SingleStore in the browser popup. The popup closes and the connector receives an access token (JWT) via the standard OAuth 2.0 authorization-code flow with PKCE.
+3. **Connect**.
+
+Notes:
+
+- The token is injected exactly like **Access token (JWT)** (driver `JWT=` property, no username, SSL always on), so the same [JWT authentication](https://docs.singlestore.com/cloud/security/database-access/authenticate-via-jwt/) setup on the database applies.
+- Identity provider: `https://authsvc.singlestore.com/auth/oidc/op/Customer` ([discovery document](https://authsvc.singlestore.com/auth/oidc/op/Customer/.well-known/openid-configuration)). The connector reads the authorize and token endpoints from the discovery document at sign-in time; nothing but the issuer is hardcoded.
+- The connector is registered there as a public client (client ID `b78b01a7-4216-4d2a-a9ba-5c8bc710f24f`, no secret) with redirect URI `https://oauth.powerbi.com/views/oauthredirect.html`, which is the URI Power BI requires.
+- Scopes requested: `openid offline_access`. `offline_access` returns a refresh token, which the connector uses to renew the JWT when it expires.
+
 ## Power BI Service (on-premises data gateway)
 
 To refresh reports in the Power BI Service, connect through an [on-premises data gateway](https://learn.microsoft.com/data-integration/gateway/service-gateway-onprem):
@@ -82,6 +98,8 @@ To refresh reports in the Power BI Service, connect through an [on-premises data
 The connector exposes a `TestConnection` handler so the gateway can validate credentials.
 
 > **Access token (JWT) on the gateway:** the connector uses the pasted token as-is and does not refresh it, so scheduled refresh will fail once the token expires. Re-enter a fresh token on the gateway data source before it lapses, or use Basic authentication for unattended refresh.
+
+> **Single sign-on (OIDC) on the gateway:** choose **OAuth2** as the authentication method on the gateway data source and sign in once. The stored refresh token lets the gateway renew the JWT for scheduled refresh without further sign-ins, for as long as the identity provider keeps the refresh token valid.
 
 > 📖 Full walkthrough with screenshots: [Connect Power BI Service to SingleStore via the Power BI gateway](https://docs.singlestore.com/cloud/query-data/connect-with-analytics-and-bi-tools/connect-with-power-bi/connect-power-bi-service-to-singlestore-via-power-bi-gateway/).
 
@@ -112,6 +130,9 @@ A few connector behaviors are worth knowing up front:
 
 - [Connect Power BI Desktop to SingleStore](https://docs.singlestore.com/cloud/query-data/connect-with-analytics-and-bi-tools/connect-with-power-bi/connect-power-bi-desktop-to-singlestore/)
 - [Connect Power BI Service to SingleStore via the Power BI gateway](https://docs.singlestore.com/cloud/query-data/connect-with-analytics-and-bi-tools/connect-with-power-bi/connect-power-bi-service-to-singlestore-via-power-bi-gateway/)
+- [Authenticate via JWT](https://docs.singlestore.com/cloud/security/database-access/authenticate-via-jwt/)
+- [SingleStore identity provider OIDC discovery document](https://authsvc.singlestore.com/auth/oidc/op/Customer/.well-known/openid-configuration)
+- [Power Query: handling authentication (OAuth)](https://learn.microsoft.com/power-query/handling-authentication#oauth)
 
 ## License
 

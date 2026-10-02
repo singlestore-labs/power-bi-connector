@@ -76,6 +76,37 @@ Config_SupportsTop = false; // true, false
 //
 Config_EnableDirectQuery = true;    // true, false
 
+/****************************
+ * OAuth (OIDC + PKCE) Configuration
+ ****************************/
+
+// Issuer of the OpenID Connect provider that signs users in and mints the SingleStore JWT. The
+// authorize/token endpoints are NOT hardcoded: they are read at sign-in time from the issuer's
+// standard discovery document (<issuer>/.well-known/openid-configuration), so pointing this at a
+// different OIDC provider needs no code change. Default: the SingleStore Helios customer IdP
+// (realm "Customer"); its discovery document lives at
+// https://authsvc.singlestore.com/auth/oidc/op/Customer/.well-known/openid-configuration
+Config_OAuthIssuer = "https://authsvc.singlestore.com/auth/oidc/op/Customer";
+
+// Public (PKCE) client "Power BI" registered at the issuer: application type "web", token
+// endpoint authentication "none", grants authorization_code + refresh_token, response type
+// "code", access-token type JWT with audience https://oauth.powerbi.com, and the fixed Power BI
+// redirect / post-logout URI below. This is an identifier, not a secret — extensions run on user
+// machines and must never embed one.
+Config_OAuthClientId = "b78b01a7-4216-4d2a-a9ba-5c8bc710f24f";
+
+// Scopes requested at sign-in, all from the issuer's supported set (openid, profile, email, phone,
+// address, offline_access, groups). offline_access asks for a refresh_token so Power BI Service can
+// renew the JWT during scheduled refresh without the user signing in again.
+Config_OAuthScope = "openid offline_access";
+
+// Fixed by Power BI: the IdP must redirect here, and the client registration must list it (it is
+// registered as both the redirect URI and the post-logout redirect URI).
+OAuthRedirectUri = "https://oauth.powerbi.com/views/oauthredirect.html";
+OAuthCodeChallengeMethod = "S256";
+OAuthWindowWidth = 1200;
+OAuthWindowHeight = 1000;
+
 SingleStoreConnectorMetaMain = type function (
     ServerAddr as ( type text meta [
         Documentation.FieldCaption = Extension.LoadString("ServerFieldCaption"),
@@ -373,6 +404,82 @@ shared SingleStoreODBC.Database = Value.ReplaceType(SingleStoreConnectorImpl, Si
 [DataSource.Kind="SingleStoreODBC"]
 shared SingleStoreODBC.Query = Value.ReplaceType(SingleStoreConnectorImplCustomSQL, SingleStoreConnectorMetaCustomSQL);
 
+/****************************
+ * OAuth (OIDC + PKCE) flow
+ ****************************/
+// Modeled on Microsoft's official PKCESample.pq. The user signs in at the IdP in a browser popup;
+// the IdP redirects back with a one-time code, which TokenMethod exchanges for the JWT that
+// GetODBCDataSource injects as JWT= (see Helpers[BuildCredentialConnectionString], OAuth branch).
+
+// Resolve the authorize/token endpoints from the issuer's OIDC discovery document.
+OidcEndpoints = () as record =>
+    let
+        discoveryUri = Config_OAuthIssuer & "/.well-known/openid-configuration",
+        doc = Json.Document(Web.Contents(discoveryUri))
+    in
+        Helpers[ParseOidcDiscovery](doc);
+
+StartLogin = (resourceUrl, state, display) =>
+    let
+        // PKCE: a fresh random verifier per sign-in; only its SHA-256 hash travels in the URL.
+        codeVerifier = Text.NewGuid() & Text.NewGuid(),
+        codeChallenge = Helpers[Base64UrlEncode](Crypto.CreateHash(CryptoAlgorithm.SHA256, Text.ToBinary(codeVerifier))),
+
+        authorizeUrl = OidcEndpoints()[authorize]
+            & "?"
+            & Uri.BuildQueryString(
+                [
+                    client_id = Config_OAuthClientId,
+                    response_type = "code",
+                    scope = Config_OAuthScope,
+                    code_challenge_method = OAuthCodeChallengeMethod,
+                    code_challenge = codeChallenge,
+                    state = state,
+                    redirect_uri = OAuthRedirectUri
+                ]
+            )
+    in
+        [
+            LoginUri = authorizeUrl,
+            CallbackUri = OAuthRedirectUri,
+            WindowHeight = OAuthWindowHeight,
+            WindowWidth = OAuthWindowWidth,
+            // Round-tripped to FinishLogin: the token exchange must present the plaintext verifier.
+            Context = codeVerifier
+        ];
+
+FinishLogin = (context, callbackUri, state) =>
+    let
+        callback = Helpers[ParseAuthorizeCallback](callbackUri)
+    in
+        if (callback[error] <> null) then
+            error Error.Record(callback[error], "Sign-in was not completed: " & callback[error], callback)
+        else if (callback[code] = null) then
+            error Error.Record("Error", "Sign-in callback did not include an authorization code", callback)
+        else
+            TokenMethod(callback[code], "authorization_code", context);
+
+Refresh = (resourceUrl, refresh_token) => TokenMethod(refresh_token, "refresh_token");
+
+// One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
+TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
+    let
+        query = Helpers[BuildTokenRequestQuery](Config_OAuthClientId, OAuthRedirectUri, grantType, code, verifier),
+        response = Web.Contents(
+            OidcEndpoints()[token],
+            [
+                Content = Text.ToBinary(Uri.BuildQueryString(query)),
+                Headers = [
+                    #"Content-type" = "application/x-www-form-urlencoded",
+                    #"Accept" = "application/json"
+                ],
+                ManualStatusHandling = {400, 401, 403}
+            ]
+        ),
+        body = Json.Document(response)
+    in
+        Helpers[SelectTokenFields](body);
+
 // Data Source Kind description
 SingleStoreODBC = [
     // Set the TestConnection handler to enable gateway support.
@@ -398,6 +505,14 @@ SingleStoreODBC = [
         Key = [
             Label = Extension.LoadString("JwtAuthLabel"),
             KeyLabel = Extension.LoadString("JwtKeyLabel")
+        ],
+        // "Sign in" auth: OIDC authorization-code flow with PKCE against Config_OAuthIssuer. The
+        // resulting JWT is injected exactly like Key; Refresh keeps Service scheduled refresh alive.
+        OAuth = [
+            StartLogin = StartLogin,
+            FinishLogin = FinishLogin,
+            Refresh = Refresh,
+            Label = Extension.LoadString("OAuthLabel")
         ]
     ],
 
