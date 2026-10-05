@@ -80,28 +80,16 @@ Config_EnableDirectQuery = true;    // true, false
  * OAuth (OIDC + PKCE) Configuration
  ****************************/
 
-// Issuer of the OpenID Connect provider that signs users in and mints the SingleStore JWT. The
-// authorize/token endpoints are NOT hardcoded: they are read at sign-in time from the issuer's
-// standard discovery document (<issuer>/.well-known/openid-configuration), so pointing this at a
-// different OIDC provider needs no code change. Default: the SingleStore Helios customer IdP
-// (realm "Customer"); its discovery document lives at
-// https://authsvc.singlestore.com/auth/oidc/op/Customer/.well-known/openid-configuration
+// OIDC issuer. Authorize/token endpoints are read from its discovery document at sign-in time.
 Config_OAuthIssuer = "https://authsvc.singlestore.com/auth/oidc/op/Customer";
 
-// Public (PKCE) client "Power BI" registered at the issuer: application type "web", token
-// endpoint authentication "none", grants authorization_code + refresh_token, response type
-// "code", access-token type JWT with audience https://oauth.powerbi.com, and the fixed Power BI
-// redirect / post-logout URI below. This is an identifier, not a secret — extensions run on user
-// machines and must never embed one.
+// Public PKCE client registered at the issuer (no client secret).
 Config_OAuthClientId = "b78b01a7-4216-4d2a-a9ba-5c8bc710f24f";
 
-// Scopes requested at sign-in, all from the issuer's supported set (openid, profile, email, phone,
-// address, offline_access, groups). offline_access asks for a refresh_token so Power BI Service can
-// renew the JWT during scheduled refresh without the user signing in again.
+// offline_access requests a refresh_token so the token can be renewed without signing in again.
 Config_OAuthScope = "openid offline_access";
 
-// Fixed by Power BI: the IdP must redirect here, and the client registration must list it (it is
-// registered as both the redirect URI and the post-logout redirect URI).
+// This is the expected Redirect URI for OAuth flows to work in the Power BI Service.
 OAuthRedirectUri = "https://oauth.powerbi.com/views/oauthredirect.html";
 OAuthCodeChallengeMethod = "S256";
 OAuthWindowWidth = 1200;
@@ -407,9 +395,7 @@ shared SingleStoreODBC.Query = Value.ReplaceType(SingleStoreConnectorImplCustomS
 /****************************
  * OAuth (OIDC + PKCE) flow
  ****************************/
-// Modeled on Microsoft's official PKCESample.pq. The user signs in at the IdP in a browser popup;
-// the IdP redirects back with a one-time code, which TokenMethod exchanges for the JWT that
-// GetODBCDataSource injects as JWT= (see Helpers[BuildCredentialConnectionString], OAuth branch).
+// Modeled on Microsoft's official PKCESample.pq.
 
 // Resolve the authorize/token endpoints from the issuer's OIDC discovery document.
 OidcEndpoints = () as record =>
@@ -421,7 +407,6 @@ OidcEndpoints = () as record =>
 
 StartLogin = (resourceUrl, state, display) =>
     let
-        // PKCE: a fresh random verifier per sign-in; only its SHA-256 hash travels in the URL.
         codeVerifier = Text.NewGuid() & Text.NewGuid(),
         codeChallenge = Helpers[Base64UrlEncode](Crypto.CreateHash(CryptoAlgorithm.SHA256, Text.ToBinary(codeVerifier))),
 
