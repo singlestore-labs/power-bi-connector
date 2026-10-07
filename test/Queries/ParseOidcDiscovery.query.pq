@@ -1,7 +1,5 @@
-// Pins how the connector reads an OIDC discovery document (<issuer>/.well-known/openid-configuration).
-// Only the authorize and token endpoints are needed; every other field in the document is ignored.
-// A document missing either endpoint is an error, so a misconfigured issuer fails at sign-in with a
-// clear message instead of a broken URL later in the flow.
+// Pins the behavior of Helpers[ParseOidcDiscovery]: extracts authorization_endpoint and
+// token_endpoint from the discovery document and errors if either is missing.
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,

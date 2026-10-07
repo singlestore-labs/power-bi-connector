@@ -1,7 +1,5 @@
-// Pins how FinishLogin reads the OAuth redirect. After the user signs in, the IdP sends the browser
-// back to the fixed Power BI redirect URI with the result in the query string: "code" + "state" on
-// success, or "error" when the user declined / the request was rejected. Missing parameters come
-// back as null so the caller can branch on them without try/catch.
+// Pins the behavior of Helpers[ParseAuthorizeCallback]: reads code/state/error from the redirect
+// URI's query string; missing parameters come back as null.
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,

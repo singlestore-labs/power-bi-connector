@@ -1,5 +1,5 @@
-// Pins the RFC 4648 §5 base64url encoding used to build the PKCE code_challenge. It is standard
-// base64 with the "=" padding removed and the two URL-unsafe characters remapped ("+"->"-", "/"->"_").
+// Pins the behavior of Helpers[Base64UrlEncode] (RFC 4648 §5 base64url, used for the PKCE
+// code_challenge): standard base64 with "=" padding dropped and "+"/"/" remapped to "-"/"_".
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,

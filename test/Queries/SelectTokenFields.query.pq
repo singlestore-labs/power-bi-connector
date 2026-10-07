@@ -1,9 +1,6 @@
-// Pins how a parsed token-endpoint response becomes the credential record Power BI stores. A
-// success body passes through unchanged: access_token is what GetODBCDataSource later injects as
-// JWT=, refresh_token is what Power BI hands to Refresh, and everything else (expires_in, id_token,
-// scope, ...) is kept in the credential's Properties rather than dropped. An "error" body becomes
-// an M error whose reason is the OAuth error code and whose message is the IdP's error_description,
-// so sign-in failures surface with the IdP's own wording. A body without access_token is an error.
+// Pins the behavior of Helpers[SelectTokenFields]: a success body is returned unchanged, an
+// "error" body raises with the OAuth error code as reason and error_description as message,
+// and a body without access_token raises.
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,

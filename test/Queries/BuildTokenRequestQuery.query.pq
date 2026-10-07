@@ -1,7 +1,6 @@
-// Pins the form body TokenMethod POSTs to the token endpoint. One helper serves both OAuth grants:
-// the initial exchange sends the authorization code as "code" together with the PKCE code_verifier,
-// while a refresh sends the stored token as "refresh_token" and no verifier. Nothing else (client
-// secret in particular) is ever added — this is a public PKCE client.
+// Pins the behavior of Helpers[BuildTokenRequestQuery]: the authorization_code grant sends "code"
+// plus the PKCE code_verifier, the refresh_token grant sends "refresh_token" and no verifier.
+// No client_secret is ever added (public client).
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,
