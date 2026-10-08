@@ -467,7 +467,13 @@ TokenMethod = (code as text, grantType as text, optional verifier as nullable te
         ),
         body = Json.Document(response)
     in
-        Helpers[SelectTokenFields](body);
+        if body[error]? = "invalid_grant" then
+            error Extension.CredentialError(
+                Credential.AccessDenied,
+                body[error_description]? ?? "Sign-in has expired, please sign in again"
+            )
+        else
+            Helpers[SelectTokenFields](body);
 
 // Data Source Kind description
 SingleStoreODBC = [
