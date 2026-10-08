@@ -128,10 +128,12 @@ let
     // Form body for the token endpoint. Used for both the authorization_code and refresh_token grants.
     BuildTokenRequestQuery = (clientId as text, redirectUri as text, grantType as text, code as text, optional verifier as nullable text) as record =>
         let
-            codeVerifier = if (verifier <> null) then [ code_verifier = verifier ] else [],
-            codeParameter = if (grantType = "authorization_code") then [ code = code ] else [ refresh_token = code ]
+            base = [ client_id = clientId, grant_type = grantType ]
         in
-            [ client_id = clientId, grant_type = grantType, redirect_uri = redirectUri ] & codeParameter & codeVerifier,
+            if grantType = "authorization_code" then
+                base & [ redirect_uri = redirectUri, code = code, code_verifier = verifier ]
+            else
+                base & [ refresh_token = code ],
 
     // Authorize and token endpoints from the OIDC discovery document.
     ParseOidcDiscovery = (doc as record) as record =>

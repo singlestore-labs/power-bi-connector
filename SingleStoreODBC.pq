@@ -463,7 +463,12 @@ TokenMethod = (code as text, grantType as text, optional verifier as nullable te
         ),
         body = Json.Document(response)
     in
-        Helpers[SelectTokenFields](body);
+        // invalid_grant means the code or refresh token is expired/revoked. Raising a credential error
+        // makes Power BI prompt for sign-in again (Desktop) or mark the gateway credential invalid.
+        if body[error]? = "invalid_grant" then
+            error Extension.CredentialError(Credential.AccessDenied, body[error_description]? ?? "Sign-in has expired, please sign in again")
+        else
+            Helpers[SelectTokenFields](body);
 
 // Data Source Kind description
 SingleStoreODBC = [
