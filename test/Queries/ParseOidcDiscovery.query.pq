@@ -1,5 +1,5 @@
-// Pins the behavior of Helpers[ParseOidcDiscovery]: extracts authorization_endpoint and
-// token_endpoint from the discovery document and errors if either is missing.
+// Pins the behavior of Helpers[ParseOidcDiscovery]: extracts authorization_endpoint, token_endpoint
+// and the optional end_session_endpoint from the discovery document; errors if authorize or token is missing.
 let
     H = SingleStoreODBCTests.Helpers,
     Assert = SingleStoreODBCTests.Assert,
@@ -8,15 +8,21 @@ let
         issuer = Issuer,
         authorization_endpoint = Issuer & "/authorize",
         token_endpoint = Issuer & "/token",
+        end_session_endpoint = Issuer & "/end_session",
         jwks_uri = Issuer & "/jwks",
         response_types_supported = { "code" },
         code_challenge_methods_supported = { "S256" }
     ],
     Tests = {
         Assert[Equal](
-            "authorize and token endpoints are extracted",
-            [ authorize = Issuer & "/authorize", token = Issuer & "/token" ],
+            "authorize, token and end_session endpoints are extracted",
+            [ authorize = Issuer & "/authorize", token = Issuer & "/token", endSession = Issuer & "/end_session" ],
             () => H[ParseOidcDiscovery](Discovery)
+        ),
+        Assert[Equal](
+            "missing end_session_endpoint yields null endSession",
+            [ authorize = Issuer & "/authorize", token = Issuer & "/token", endSession = null ],
+            () => H[ParseOidcDiscovery](Record.RemoveFields(Discovery, "end_session_endpoint"))
         ),
         Assert[ErrorMessage](
             "missing token_endpoint errors",

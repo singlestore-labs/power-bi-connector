@@ -450,6 +450,18 @@ Refresh = (resourceUrl, refresh_token) =>
     else
         Helpers[PreserveRefreshToken](TokenMethod(refresh_token, "refresh_token"), refresh_token);
 
+Logout = (access_token) =>
+    let
+        endSession = OidcEndpoints()[endSession]
+    in
+        if endSession = null then
+            OAuthRedirectUri
+        else
+            endSession & "?" & Uri.BuildQueryString([
+                client_id = Config_OAuthClientId,
+                post_logout_redirect_uri = OAuthRedirectUri
+            ]);
+
 // One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
 TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
     let
@@ -507,6 +519,7 @@ SingleStoreODBC = [
             StartLogin = StartLogin,
             FinishLogin = FinishLogin,
             Refresh = Refresh,
+            Logout = Logout,
             Label = Extension.LoadString("OAuthLabel")
         ]
     ],
