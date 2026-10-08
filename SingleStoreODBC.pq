@@ -444,39 +444,54 @@ FinishLogin = (context, callbackUri, state) =>
         else
             TokenMethod(callback[code], "authorization_code", context);
 
+OAuthPost = (url as text, query as record) =>
+    Web.Contents(
+        url,
+        [
+            Content = Text.ToBinary(Uri.BuildQueryString(query)),
+            Headers = [
+                #"Content-Type" = "application/x-www-form-urlencoded",
+                #"Accept" = "application/json"
+            ],
+            ManualStatusHandling = {400, 401, 403}
+        ]
+    );
+
 Refresh = (resourceUrl, refresh_token) =>
     if refresh_token = null then
         error Extension.CredentialError(Credential.AccessDenied, "No refresh token is available. Sign in again.")
     else
         Helpers[PreserveRefreshToken](TokenMethod(refresh_token, "refresh_token"), refresh_token);
 
-Logout = (access_token as text) =>
+Logout = (accessToken as nullable text) =>
     let
         revocationEndpoint = OidcEndpoints()[revocation],
 
-        result =
-            if revocationEndpoint = null then
+        response =
+            if accessToken = null or revocationEndpoint = null then
                 null
             else
-                Web.Contents(
+                OAuthPost(
                     revocationEndpoint,
                     [
-                        Content = Text.ToBinary(
-                            Uri.BuildQueryString(
-                                [
-                                    token = access_token,
-                                    client_id = Config_OAuthClientId
-                                ]
-                            )
-                        ),
-                        Headers = [
-                            #"Content-Type" = "application/x-www-form-urlencoded"
-                        ],
-                        ManualStatusHandling = {400, 401, 403}
+                        token = accessToken,
+                        client_id = Config_OAuthClientId
                     ]
-                )
+                ),
+        status =
+            if response = null then
+                null
+            else
+                Value.Metadata(response)[Response.Status]?
     in
-        null;
+        if status <> null and status >= 400 then
+            error Error.Record(
+                "OAuthLogoutError",
+                "Failed to revoke OAuth access token.",
+                [Status = status]
+            )
+        else
+            null;
 
 // One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
 TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>

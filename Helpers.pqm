@@ -169,7 +169,7 @@ let
 
     // Keep the current refresh_token when the IdP does not return a new one on refresh.
     PreserveRefreshToken = (response as record, refreshToken as text) as record =>
-        if Record.HasFields(response, "refresh_token") then
+        if response[refresh_token]? <> null then
             response
         else
             response & [ refresh_token = refreshToken ]
