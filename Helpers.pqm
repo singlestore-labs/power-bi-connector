@@ -149,11 +149,30 @@ let
     // Turn a parsed token-endpoint response into the credential record Power BI persists.
     SelectTokenFields = (body as record) as record =>
         if Record.HasFields(body, "error") then
-            error Error.Record(body[error], Record.FieldOrDefault(body, "error_description", null), body)
-        else if Record.FieldOrDefault(body, "access_token", null) = null then
+            // invalid_grant means the code or refresh token is expired/revoked. A credential error makes
+            // Power BI prompt for sign-in again (Desktop) or mark the gateway credential invalid.
+            if body[error] = "invalid_grant" then
+                error Extension.CredentialError(
+                    Credential.AccessDenied,
+                    body[error_description]? ?? "Sign-in has expired, please sign in again"
+                )
+            else
+                error Error.Record(
+                    body[error],
+                    body[error_description]?,
+                    body
+                )
+        else if body[access_token]? = null then
             error Error.Record("Error", "Token endpoint response did not include an access_token", body)
         else
-            body
+            body,
+
+    // Keep the current refresh_token when the IdP does not return a new one on refresh.
+    PreserveRefreshToken = (response as record, refreshToken as text) as record =>
+        if Record.HasFields(response, "refresh_token") then
+            response
+        else
+            response & [ refresh_token = refreshToken ]
 in
     [
         AddServerAndPort = AddServerAndPort,
@@ -168,5 +187,6 @@ in
         ParseAuthorizeCallback = ParseAuthorizeCallback,
         BuildTokenRequestQuery = BuildTokenRequestQuery,
         ParseOidcDiscovery = ParseOidcDiscovery,
-        SelectTokenFields = SelectTokenFields
+        SelectTokenFields = SelectTokenFields,
+        PreserveRefreshToken = PreserveRefreshToken
     ]

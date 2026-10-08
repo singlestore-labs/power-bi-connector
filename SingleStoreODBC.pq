@@ -444,7 +444,11 @@ FinishLogin = (context, callbackUri, state) =>
         else
             TokenMethod(callback[code], "authorization_code", context);
 
-Refresh = (resourceUrl, refresh_token) => TokenMethod(refresh_token, "refresh_token");
+Refresh = (resourceUrl, refresh_token) =>
+    if refresh_token = null then
+        error Extension.CredentialError(Credential.AccessDenied, "No refresh token is available. Sign in again.")
+    else
+        Helpers[PreserveRefreshToken](TokenMethod(refresh_token, "refresh_token"), refresh_token);
 
 // One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
 TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
@@ -463,12 +467,7 @@ TokenMethod = (code as text, grantType as text, optional verifier as nullable te
         ),
         body = Json.Document(response)
     in
-        // invalid_grant means the code or refresh token is expired/revoked. Raising a credential error
-        // makes Power BI prompt for sign-in again (Desktop) or mark the gateway credential invalid.
-        if body[error]? = "invalid_grant" then
-            error Extension.CredentialError(Credential.AccessDenied, body[error_description]? ?? "Sign-in has expired, please sign in again")
-        else
-            Helpers[SelectTokenFields](body);
+        Helpers[SelectTokenFields](body);
 
 // Data Source Kind description
 SingleStoreODBC = [
