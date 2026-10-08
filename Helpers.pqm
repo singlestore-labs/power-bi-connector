@@ -140,12 +140,19 @@ let
         let
             authorize = Record.FieldOrDefault(doc, "authorization_endpoint", null),
             token = Record.FieldOrDefault(doc, "token_endpoint", null),
-            endSession = Record.FieldOrDefault(doc, "end_session_endpoint", null)
+            revocation = Record.FieldOrDefault(doc, "revocation_endpoint", null)
         in
             if authorize = null or token = null then
-                error Error.Record("Error", "OIDC discovery document missing authorization_endpoint or token_endpoint")
+                error Error.Record(
+                    "Error",
+                    "OIDC discovery document missing authorization_endpoint or token_endpoint"
+                )
             else
-                [ authorize = authorize, token = token, endSession = endSession ],
+                [
+                    authorize = authorize,
+                    token = token,
+                    revocation = revocation
+                ],
 
     // Turn a parsed token-endpoint response into the credential record Power BI persists.
     SelectTokenFields = (body as record) as record =>

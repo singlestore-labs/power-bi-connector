@@ -450,17 +450,33 @@ Refresh = (resourceUrl, refresh_token) =>
     else
         Helpers[PreserveRefreshToken](TokenMethod(refresh_token, "refresh_token"), refresh_token);
 
-Logout = (access_token) =>
+Logout = (access_token as text) =>
     let
-        endSession = OidcEndpoints()[endSession]
+        revocationEndpoint = OidcEndpoints()[revocation],
+
+        result =
+            if revocationEndpoint = null then
+                null
+            else
+                Web.Contents(
+                    revocationEndpoint,
+                    [
+                        Content = Text.ToBinary(
+                            Uri.BuildQueryString(
+                                [
+                                    token = access_token,
+                                    client_id = Config_OAuthClientId
+                                ]
+                            )
+                        ),
+                        Headers = [
+                            #"Content-Type" = "application/x-www-form-urlencoded"
+                        ],
+                        ManualStatusHandling = {400, 401, 403}
+                    ]
+                )
     in
-        if endSession = null then
-            OAuthRedirectUri
-        else
-            endSession & "?" & Uri.BuildQueryString([
-                client_id = Config_OAuthClientId,
-                post_logout_redirect_uri = OAuthRedirectUri
-            ]);
+        null;
 
 // One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
 TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
