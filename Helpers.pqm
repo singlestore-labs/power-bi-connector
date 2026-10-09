@@ -135,7 +135,7 @@ let
             else
                 base & [ refresh_token = code ],
 
-    // Authorize, token and (optional) end_session endpoints from the OIDC discovery document.
+    // Authorize, token and (optional) revocation endpoints from the OIDC discovery document.
     ParseOidcDiscovery = (doc as record) as record =>
         let
             authorize = Record.FieldOrDefault(doc, "authorization_endpoint", null),

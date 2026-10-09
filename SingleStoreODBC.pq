@@ -463,50 +463,39 @@ Refresh = (resourceUrl, refresh_token) =>
     else
         Helpers[PreserveRefreshToken](TokenMethod(refresh_token, "refresh_token"), refresh_token);
 
-Logout = (accessToken as nullable text) =>
+// Power BI clears the local credential regardless of the outcome, so a missing endpoint, unreachable IdP or non-2xx reply must never block sign-out.
+Logout = (access_token as nullable text) =>
     let
-        revocationEndpoint = OidcEndpoints()[revocation],
+        revocationEndpoint = try OidcEndpoints()[revocation] otherwise null,
 
-        response =
-            if accessToken = null or revocationEndpoint = null then
-                null
-            else
-                OAuthPost(
-                    revocationEndpoint,
-                    [
-                        token = accessToken,
-                        client_id = Config_OAuthClientId
-                    ]
-                ),
         status =
-            if response = null then
+            if access_token = null or revocationEndpoint = null then
                 null
             else
-                Value.Metadata(response)[Response.Status]?
+                try
+                    Value.Metadata(
+                        OAuthPost(
+                            revocationEndpoint,
+                            [
+                                token = access_token,
+                                token_type_hint = "access_token",
+                                client_id = Config_OAuthClientId
+                            ]
+                        )
+                    )[Response.Status]?
+                otherwise
+                    null
     in
-        if status <> null and status >= 400 then
-            error Error.Record(
-                "OAuthLogoutError",
-                "Failed to revoke OAuth access token.",
-                [Status = status]
-            )
-        else
-            null;
+        // Referencing status forces the request to be sent; its value is intentionally ignored.
+        if status = null then null else null;
 
 // One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
 TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
     let
         query = Helpers[BuildTokenRequestQuery](Config_OAuthClientId, OAuthRedirectUri, grantType, code, verifier),
-        response = Web.Contents(
+        response = OAuthPost(
             OidcEndpoints()[token],
-            [
-                Content = Text.ToBinary(Uri.BuildQueryString(query)),
-                Headers = [
-                    #"Content-type" = "application/x-www-form-urlencoded",
-                    #"Accept" = "application/json"
-                ],
-                ManualStatusHandling = {400, 401, 403}
-            ]
+            query
         ),
         body = Json.Document(response)
     in
