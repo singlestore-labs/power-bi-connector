@@ -11,7 +11,7 @@
      Reset to a clean 2.0.0 baseline: earlier releases drifted (up to 1.2.0), so 2.0.0 is a
      round starting point that is still strictly greater than anything shipped, keeping Burn's
      upgrade detection intact. Never drop below the highest version already released. -->
-<?define Version = "2.0.0" ?>
+<?define Version = "2.1.0" ?>
 <!-- UpgradeCode must be unique and not changed once the first version of the program is installed. -->
 <?define UpgradeCode = "5e752819-cb4c-49c9-8a4b-576baa25c9e1" ?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
