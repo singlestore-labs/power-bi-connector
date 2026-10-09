@@ -81,8 +81,10 @@ let
     // is spelled out here so every supported auth kind lives in one testable place.
     //   UsernamePassword -> UID/PWD (basic auth)
     //   Windows          -> Trusted_Connection (Windows/Kerberos)
-    //   Key              -> JWT= only (SingleStore JWT/access-token auth; no UID — the server
-    //                       resolves the username from the token's claims)
+    //   Key              -> JWT= only (SingleStore JWT: user pastes an access token)
+    //   OAuth            -> JWT= only (SingleStore JWT: token obtained via the OAuth sign-in flow)
+    // Key and OAuth are the same injection (dedicated JWT= property, no UID — the server resolves
+    // the username from the token's claims); they differ only in how the token is acquired.
     BuildCredentialConnectionString = (credential as record) as record =>
         let
             authKind = credential[AuthenticationKind]?
@@ -93,12 +95,84 @@ let
                 [ Trusted_Connection = "Yes" ]
             else if authKind = "Key" then
                 [ JWT = credential[Key] ]
+            else if authKind = "OAuth" then
+                [ JWT = credential[access_token] ]
             else
                 error Error.Record("Error", "Unhandled authentication kind: " & authKind),
 
-    // SingleStore access-token (JWT) users are created REQUIRE SSL, so the Key auth path mandates
-    // encryption regardless of the UseSSL option or the credential's EncryptConnection.
-    TokenAuthRequiresSsl = (authKind) as logical => authKind = "Key"
+    // SingleStore JWT users are created REQUIRE SSL, so the token-based auth paths (Key and OAuth)
+    // mandate encryption regardless of the UseSSL option or the credential's EncryptConnection.
+    TokenAuthRequiresSsl = (authKind) as logical => authKind = "Key" or authKind = "OAuth",
+
+    // --- OAuth / OIDC PKCE helpers ---
+
+    Base64UrlEncode = (data as binary) as text =>
+        let
+            base64 = Binary.ToText(data, BinaryEncoding.Base64),
+            noPadding = Text.BeforeDelimiter(base64, "="),
+            urlSafe = Text.Replace(Text.Replace(noPadding, "+", "-"), "/", "_")
+        in
+            urlSafe,
+
+    // Extract the code / state / error query parameters from the OAuth redirect callback URI.
+    ParseAuthorizeCallback = (callbackUri as text) as record =>
+        let
+            query = Uri.Parts(callbackUri)[Query]
+        in
+            [
+                code = Record.FieldOrDefault(query, "code", null),
+                state = Record.FieldOrDefault(query, "state", null),
+                error = Record.FieldOrDefault(query, "error", null)
+            ],
+
+    // Form body for the token endpoint. Used for both the authorization_code and refresh_token grants.
+    BuildTokenRequestQuery = (clientId as text, redirectUri as text, grantType as text, code as text, optional verifier as nullable text) as record =>
+        let
+            base = [ client_id = clientId, grant_type = grantType ]
+        in
+            if grantType = "authorization_code" then
+                base & [ redirect_uri = redirectUri, code = code, code_verifier = verifier ]
+            else
+                base & [ refresh_token = code ],
+
+    // Authorize, token and (optional) revocation endpoints from the OIDC discovery document.
+    ParseOidcDiscovery = (doc as record) as record =>
+        let
+            authorize = Record.FieldOrDefault(doc, "authorization_endpoint", null),
+            token = Record.FieldOrDefault(doc, "token_endpoint", null),
+            revocation = Record.FieldOrDefault(doc, "revocation_endpoint", null)
+        in
+            if authorize = null or token = null then
+                error Error.Record(
+                    "Error",
+                    "OIDC discovery document missing authorization_endpoint or token_endpoint"
+                )
+            else
+                [
+                    authorize = authorize,
+                    token = token,
+                    revocation = revocation
+                ],
+
+    // Turn a parsed token-endpoint response into the credential record Power BI persists.
+    SelectTokenFields = (body as record) as record =>
+        if Record.HasFields(body, "error") then
+            error Error.Record(
+                body[error],
+                body[error_description]?,
+                body
+            )
+        else if body[access_token]? = null then
+            error Error.Record("Error", "Token endpoint response did not include an access_token", body)
+        else
+            body,
+
+    // Keep the current refresh_token when the IdP does not return a new one on refresh.
+    PreserveRefreshToken = (response as record, refreshToken as text) as record =>
+        if response[refresh_token]? <> null then
+            response
+        else
+            response & [ refresh_token = refreshToken ]
 in
     [
         AddServerAndPort = AddServerAndPort,
@@ -108,5 +182,11 @@ in
         StripTrailingSemicolons = StripTrailingSemicolons,
         ResolveSsl = ResolveSsl,
         BuildCredentialConnectionString = BuildCredentialConnectionString,
-        TokenAuthRequiresSsl = TokenAuthRequiresSsl
+        TokenAuthRequiresSsl = TokenAuthRequiresSsl,
+        Base64UrlEncode = Base64UrlEncode,
+        ParseAuthorizeCallback = ParseAuthorizeCallback,
+        BuildTokenRequestQuery = BuildTokenRequestQuery,
+        ParseOidcDiscovery = ParseOidcDiscovery,
+        SelectTokenFields = SelectTokenFields,
+        PreserveRefreshToken = PreserveRefreshToken
     ]

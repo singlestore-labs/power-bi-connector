@@ -76,6 +76,25 @@ Config_SupportsTop = false; // true, false
 //
 Config_EnableDirectQuery = true;    // true, false
 
+/****************************
+ * OAuth (OIDC + PKCE) Configuration
+ ****************************/
+
+// OIDC issuer. Authorize/token endpoints are read from its discovery document at sign-in time.
+Config_OAuthIssuer = "https://authsvc.singlestore.com/auth/oidc/op/Customer";
+
+// Public PKCE client registered at the issuer (no client secret).
+Config_OAuthClientId = "b78b01a7-4216-4d2a-a9ba-5c8bc710f24f";
+
+// offline_access requests a refresh_token so the token can be renewed without signing in again.
+Config_OAuthScope = "openid offline_access";
+
+// This is the expected Redirect URI for OAuth flows to work in the Power BI Service.
+OAuthRedirectUri = "https://oauth.powerbi.com/views/oauthredirect.html";
+OAuthCodeChallengeMethod = "S256";
+OAuthWindowWidth = 1200;
+OAuthWindowHeight = 1000;
+
 SingleStoreConnectorMetaMain = type function (
     ServerAddr as ( type text meta [
         Documentation.FieldCaption = Extension.LoadString("ServerFieldCaption"),
@@ -373,6 +392,121 @@ shared SingleStoreODBC.Database = Value.ReplaceType(SingleStoreConnectorImpl, Si
 [DataSource.Kind="SingleStoreODBC"]
 shared SingleStoreODBC.Query = Value.ReplaceType(SingleStoreConnectorImplCustomSQL, SingleStoreConnectorMetaCustomSQL);
 
+/****************************
+ * OAuth (OIDC + PKCE) flow
+ ****************************/
+// Modeled on Microsoft's official PKCESample.pq.
+
+// Resolve the authorize/token endpoints from the issuer's OIDC discovery document.
+OidcEndpoints = () as record =>
+    let
+        discoveryUri = Config_OAuthIssuer & "/.well-known/openid-configuration",
+        doc = Json.Document(Web.Contents(discoveryUri))
+    in
+        Helpers[ParseOidcDiscovery](doc);
+
+StartLogin = (resourceUrl, state, display) =>
+    let
+        codeVerifier = Text.NewGuid() & Text.NewGuid(),
+        codeChallenge = Helpers[Base64UrlEncode](Crypto.CreateHash(CryptoAlgorithm.SHA256, Text.ToBinary(codeVerifier))),
+
+        authorizeUrl = OidcEndpoints()[authorize]
+            & "?"
+            & Uri.BuildQueryString(
+                [
+                    client_id = Config_OAuthClientId,
+                    response_type = "code",
+                    scope = Config_OAuthScope,
+                    code_challenge_method = OAuthCodeChallengeMethod,
+                    code_challenge = codeChallenge,
+                    state = state,
+                    redirect_uri = OAuthRedirectUri
+                ]
+            )
+    in
+        [
+            LoginUri = authorizeUrl,
+            CallbackUri = OAuthRedirectUri,
+            WindowHeight = OAuthWindowHeight,
+            WindowWidth = OAuthWindowWidth,
+            // Round-tripped to FinishLogin: the token exchange must present the plaintext verifier.
+            Context = codeVerifier
+        ];
+
+FinishLogin = (context, callbackUri, state) =>
+    let
+        callback = Helpers[ParseAuthorizeCallback](callbackUri)
+    in
+        if (callback[error] <> null) then
+            error Error.Record(callback[error], "Sign-in was not completed: " & callback[error], callback)
+        else if (callback[code] = null) then
+            error Error.Record("Error", "Sign-in callback did not include an authorization code", callback)
+        else
+            TokenMethod(callback[code], "authorization_code", context);
+
+OAuthPost = (url as text, query as record) =>
+    Web.Contents(
+        url,
+        [
+            Content = Text.ToBinary(Uri.BuildQueryString(query)),
+            Headers = [
+                #"Content-Type" = "application/x-www-form-urlencoded",
+                #"Accept" = "application/json"
+            ],
+            ManualStatusHandling = {400, 401, 403}
+        ]
+    );
+
+Refresh = (resourceUrl, refresh_token) =>
+    if refresh_token = null then
+        error Extension.CredentialError(Credential.AccessDenied, "No refresh token is available. Sign in again.")
+    else
+        Helpers[PreserveRefreshToken](TokenMethod(refresh_token, "refresh_token"), refresh_token);
+
+// Power BI clears the local credential regardless of the outcome, so a missing endpoint, unreachable IdP or non-2xx reply must never block sign-out.
+Logout = (access_token as nullable text) =>
+    let
+        revocationEndpoint = try OidcEndpoints()[revocation] otherwise null,
+
+        status =
+            if access_token = null or revocationEndpoint = null then
+                null
+            else
+                try
+                    Value.Metadata(
+                        OAuthPost(
+                            revocationEndpoint,
+                            [
+                                token = access_token,
+                                token_type_hint = "access_token",
+                                client_id = Config_OAuthClientId
+                            ]
+                        )
+                    )[Response.Status]?
+                otherwise
+                    null
+    in
+        // Referencing status forces the request to be sent; its value is intentionally ignored.
+        if status = null then null else null;
+
+// One exchange for both grants: authorization_code (with the PKCE verifier) and refresh_token.
+TokenMethod = (code as text, grantType as text, optional verifier as nullable text) =>
+    let
+        query = Helpers[BuildTokenRequestQuery](Config_OAuthClientId, OAuthRedirectUri, grantType, code, verifier),
+        response = OAuthPost(
+            OidcEndpoints()[token],
+            query
+        ),
+        body = Json.Document(response)
+    in
+        if body[error]? = "invalid_grant" then
+            error Extension.CredentialError(
+                Credential.AccessDenied,
+                body[error_description]? ?? "Sign-in has expired, please sign in again"
+            )
+        else
+            Helpers[SelectTokenFields](body);
+
 // Data Source Kind description
 SingleStoreODBC = [
     // Set the TestConnection handler to enable gateway support.
@@ -398,6 +532,15 @@ SingleStoreODBC = [
         Key = [
             Label = Extension.LoadString("JwtAuthLabel"),
             KeyLabel = Extension.LoadString("JwtKeyLabel")
+        ],
+        // "Sign in" auth: OIDC authorization-code flow with PKCE against Config_OAuthIssuer. The
+        // resulting JWT is injected exactly like Key; Refresh keeps Service scheduled refresh alive.
+        OAuth = [
+            StartLogin = StartLogin,
+            FinishLogin = FinishLogin,
+            Refresh = Refresh,
+            Logout = Logout,
+            Label = Extension.LoadString("OAuthLabel")
         ]
     ],
 
