@@ -180,4 +180,16 @@
   <data name="UseSSLAllowedValues" xml:space="preserve">
     <value>true, false</value>
   </data>
+  <data name="ConnectionTimeoutFieldCaption" xml:space="preserve">
+    <value>Connection timeout (seconds)</value>
+  </data>
+  <data name="ConnectionTimeoutFieldDescription" xml:space="preserve">
+    <value>How long to wait before abandoning an attempt to connect to the server. Default is 15 seconds.</value>
+  </data>
+  <data name="CommandTimeoutFieldCaption" xml:space="preserve">
+    <value>Command timeout (seconds)</value>
+  </data>
+  <data name="CommandTimeoutFieldDescription" xml:space="preserve">
+    <value>How long a server-side query is allowed to run before it is canceled. Default is 10 minutes.</value>
+  </data>
 </root>

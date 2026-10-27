@@ -108,6 +108,16 @@ SingleStoreConnectorMetaMain = type function (
     ]),
     optional options as (
         type nullable [
+            optional ConnectionTimeout = (type nullable number meta [
+                Documentation.FieldCaption = Extension.LoadString("ConnectionTimeoutFieldCaption"),
+                Documentation.FieldDescription = Extension.LoadString("ConnectionTimeoutFieldDescription"),
+                Documentation.SampleValues = { 15 }
+            ]),
+            optional CommandTimeout = (type nullable number meta [
+                Documentation.FieldCaption = Extension.LoadString("CommandTimeoutFieldCaption"),
+                Documentation.FieldDescription = Extension.LoadString("CommandTimeoutFieldDescription"),
+                Documentation.SampleValues = { 600 }
+            ])
         ]
     )
     ) as table meta [
@@ -290,6 +300,13 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             else
                 ConnectionString,
 
+        // Timeouts come from the Advanced options as seconds; Odbc.DataSource expects durations.
+        // Fields are omitted when unset so the Odbc.DataSource defaults (15 s / 10 min) apply.
+        TimeoutOptions = Record.Combine({
+            if options[ConnectionTimeout]? <> null then [ConnectionTimeout = #duration(0, 0, 0, options[ConnectionTimeout])] else [],
+            if options[CommandTimeout]? <> null then [CommandTimeout = #duration(0, 0, 0, options[CommandTimeout])] else []
+        }),
+
         OdbcDatasource = Odbc.DataSource(ConnectionStringWithSSL, [
             // A logical (true/false) that sets whether to view the tables grouped by their schema names
             HierarchicalNavigation = true, 
@@ -313,7 +330,7 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             SQLColumns = SQLColumns,
             SQLGetInfo = SQLGetInfo,
             SQLGetTypeInfo = SQLGetTypeInfo
-        ]){[Name=Database]}[Data]
+        ] & TimeoutOptions){[Name=Database]}[Data]
     in
         OdbcDatasource;
 
