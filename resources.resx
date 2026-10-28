@@ -180,4 +180,22 @@
   <data name="UseSSLAllowedValues" xml:space="preserve">
     <value>true, false</value>
   </data>
+  <data name="ConnectionTimeoutFieldCaption" xml:space="preserve">
+    <value>Connection timeout (seconds)</value>
+  </data>
+  <data name="ConnectionTimeoutFieldDescription" xml:space="preserve">
+    <value>Seconds to wait for the connection to the server to be established. Leave empty for no timeout.</value>
+  </data>
+  <data name="CommandTimeoutFieldCaption" xml:space="preserve">
+    <value>Command timeout (seconds)</value>
+  </data>
+  <data name="CommandTimeoutFieldDescription" xml:space="preserve">
+    <value>Seconds to wait for a response from the server before the query is aborted. Leave empty for no timeout.</value>
+  </data>
+  <data name="NoCacheFieldCaption" xml:space="preserve">
+    <value>Disable driver result cache</value>
+  </data>
+  <data name="NoCacheFieldDescription" xml:space="preserve">
+    <value>When enabled, the ODBC driver streams rows from the server instead of buffering the whole result locally. Default is enabled.</value>
+  </data>
 </root>
