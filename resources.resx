@@ -184,12 +184,12 @@
     <value>Connection timeout (seconds)</value>
   </data>
   <data name="ConnectionTimeoutFieldDescription" xml:space="preserve">
-    <value>How long to wait before abandoning an attempt to connect to the server. Default is 15 seconds.</value>
+    <value>Seconds to wait for the connection to the server to be established. Leave empty for no timeout.</value>
   </data>
   <data name="CommandTimeoutFieldCaption" xml:space="preserve">
     <value>Command timeout (seconds)</value>
   </data>
   <data name="CommandTimeoutFieldDescription" xml:space="preserve">
-    <value>How long a server-side query is allowed to run before it is canceled. Default is 10 minutes.</value>
+    <value>Seconds to wait for a response from the server before the query is aborted. Leave empty for no timeout.</value>
   </data>
 </root>

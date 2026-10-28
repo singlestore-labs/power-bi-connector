@@ -300,14 +300,17 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             else
                 ConnectionString,
 
-        // Timeouts come from the Advanced options as seconds; Odbc.DataSource expects durations.
-        // Fields are omitted when unset so the Odbc.DataSource defaults (15 s / 10 min) apply.
-        TimeoutOptions = Record.Combine({
-            if options[ConnectionTimeout]? <> null then [ConnectionTimeout = #duration(0, 0, 0, options[ConnectionTimeout])] else [],
-            if options[CommandTimeout]? <> null then [CommandTimeout = #duration(0, 0, 0, options[CommandTimeout])] else []
+        // Timeouts come from the Advanced options as seconds and go into the connection string as
+        // SingleStore ODBC driver keywords. The Odbc.DataSource ConnectionTimeout / CommandTimeout
+        // options are NOT used: they set SQL_ATTR_LOGIN_TIMEOUT / SQL_ATTR_QUERY_TIMEOUT, which the
+        // driver accepts but never applies. Keywords are omitted when unset so the driver defaults (no timeout) apply.
+        ConnectionStringWithTimeouts = Record.Combine({
+            ConnectionStringWithSSL,
+            if options[ConnectionTimeout]? <> null then [CONN_TIMEOUT = options[ConnectionTimeout]] else [],
+            if options[CommandTimeout]? <> null then [READ_TIMEOUT = options[CommandTimeout]] else []
         }),
 
-        OdbcDatasource = Odbc.DataSource(ConnectionStringWithSSL, [
+        OdbcDatasource = Odbc.DataSource(ConnectionStringWithTimeouts, [
             // A logical (true/false) that sets whether to view the tables grouped by their schema names
             HierarchicalNavigation = true, 
             // Prevents execution of native SQL statements. Extensions should set this to true.
@@ -330,7 +333,7 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             SQLColumns = SQLColumns,
             SQLGetInfo = SQLGetInfo,
             SQLGetTypeInfo = SQLGetTypeInfo
-        ] & TimeoutOptions){[Name=Database]}[Data]
+        ]){[Name=Database]}[Data]
     in
         OdbcDatasource;
 
