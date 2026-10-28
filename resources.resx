@@ -192,4 +192,10 @@
   <data name="CommandTimeoutFieldDescription" xml:space="preserve">
     <value>Seconds to wait for a response from the server before the query is aborted. Leave empty for no timeout.</value>
   </data>
+  <data name="NoCacheFieldCaption" xml:space="preserve">
+    <value>Disable driver result cache</value>
+  </data>
+  <data name="NoCacheFieldDescription" xml:space="preserve">
+    <value>When enabled, the ODBC driver streams rows from the server instead of buffering the whole result locally. Default is enabled.</value>
+  </data>
 </root>

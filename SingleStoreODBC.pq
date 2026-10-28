@@ -117,6 +117,11 @@ SingleStoreConnectorMetaMain = type function (
                 Documentation.FieldCaption = Extension.LoadString("CommandTimeoutFieldCaption"),
                 Documentation.FieldDescription = Extension.LoadString("CommandTimeoutFieldDescription"),
                 Documentation.SampleValues = { 600 }
+            ]),
+            optional NoCache = (type nullable logical meta [
+                Documentation.FieldCaption = Extension.LoadString("NoCacheFieldCaption"),
+                Documentation.FieldDescription = Extension.LoadString("NoCacheFieldDescription"),
+                Documentation.AllowedValues = {true, false}
             ])
         ]
     )
@@ -300,17 +305,18 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             else
                 ConnectionString,
 
-        // Timeouts come from the Advanced options as seconds and go into the connection string as
-        // SingleStore ODBC driver keywords. The Odbc.DataSource ConnectionTimeout / CommandTimeout
+        // Advanced options go into the connection string as SingleStore ODBC driver keywords.
+        // Timeouts are given in seconds. The Odbc.DataSource ConnectionTimeout / CommandTimeout
         // options are NOT used: they set SQL_ATTR_LOGIN_TIMEOUT / SQL_ATTR_QUERY_TIMEOUT, which the
-        // driver accepts but never applies. Keywords are omitted when unset so the driver defaults (no timeout) apply.
-        ConnectionStringWithTimeouts = Record.Combine({
-            ConnectionStringWithSSL,
-            if options[ConnectionTimeout]? <> null then [CONN_TIMEOUT = options[ConnectionTimeout]] else [],
-            if options[CommandTimeout]? <> null then [READ_TIMEOUT = options[CommandTimeout]] else []
-        }),
+        // driver accepts but never applies. An explicit NoCache option overrides the NO_CACHE=1 set by
+        // the callers. Keywords are omitted when unset so the defaults apply (no timeout; NO_CACHE=1).
+        ConnectionStringWithOptions =
+            ConnectionStringWithSSL
+            & (if options[ConnectionTimeout]? <> null then [CONN_TIMEOUT = options[ConnectionTimeout]] else [])
+            & (if options[CommandTimeout]? <> null then [READ_TIMEOUT = options[CommandTimeout]] else [])
+            & (if options[NoCache]? <> null then [NO_CACHE = if options[NoCache] then 1 else 0] else []),
 
-        OdbcDatasource = Odbc.DataSource(ConnectionStringWithTimeouts, [
+        OdbcDatasource = Odbc.DataSource(ConnectionStringWithOptions, [
             // A logical (true/false) that sets whether to view the tables grouped by their schema names
             HierarchicalNavigation = true, 
             // Prevents execution of native SQL statements. Extensions should set this to true.
