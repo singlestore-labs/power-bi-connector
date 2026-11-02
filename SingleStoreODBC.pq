@@ -316,7 +316,6 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
         ConnectionStringWithOptions =
             ConnectionStringWithSSL
             & [READ_TIMEOUT = commandTimeout]
-            & (if resolvedOptions[ConnectionTimeout]? <> null then [CONN_TIMEOUT = resolvedOptions[ConnectionTimeout]] else [])
             & (if resolvedOptions[NoCache]? <> null then [NO_CACHE = if resolvedOptions[NoCache] then 1 else 0] else []),
 
         OdbcDatasource = Odbc.DataSource(ConnectionStringWithOptions, [
@@ -332,6 +331,7 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             ClientConnectionPooling = true,
             // Allows the engine to attempt a call of the ODBC Driver's SQLCancel function
             CancelQueryExplicitly = true,
+            ConnectionTimeout = #duration(0, 0, 0, 3),
 
             //ImplicitTypeConversions = ImplicitTypeConversions,
 
