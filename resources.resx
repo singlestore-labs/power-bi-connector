@@ -184,18 +184,18 @@
     <value>Connection timeout (seconds)</value>
   </data>
   <data name="ConnectionTimeoutFieldDescription" xml:space="preserve">
-    <value>Seconds to wait for the connection to the server to be established. Leave empty for no timeout.</value>
+    <value>Seconds to wait for the connection to the server to be established. Leave empty to use the default timeout behavior.</value>
   </data>
   <data name="CommandTimeoutFieldCaption" xml:space="preserve">
     <value>Command timeout (seconds)</value>
   </data>
   <data name="CommandTimeoutFieldDescription" xml:space="preserve">
-    <value>Seconds to wait for a response from the server before the query is aborted. Leave empty for no timeout.</value>
+    <value>Maximum time to wait for a server response during query execution, in seconds. Leave empty to use the default timeout behavior.</value>
   </data>
   <data name="NoCacheFieldCaption" xml:space="preserve">
     <value>Disable driver result cache</value>
   </data>
   <data name="NoCacheFieldDescription" xml:space="preserve">
-    <value>When enabled, the ODBC driver streams rows from the server instead of buffering the whole result locally. Default is enabled.</value>
+    <value>Disables ODBC driver result caching for forward-only cursors, reducing memory usage when retrieving large result sets. Enabled by default.</value>
   </data>
 </root>
