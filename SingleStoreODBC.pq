@@ -108,6 +108,16 @@ SingleStoreConnectorMetaMain = type function (
     ]),
     optional options as (
         type nullable [
+            optional CommandTimeout = (type nullable number meta [
+                Documentation.FieldCaption = Extension.LoadString("CommandTimeoutFieldCaption"),
+                Documentation.FieldDescription = Extension.LoadString("CommandTimeoutFieldDescription"),
+                Documentation.SampleValues = { 600 }
+            ]),
+            optional NoCache = (type nullable logical meta [
+                Documentation.FieldCaption = Extension.LoadString("NoCacheFieldCaption"),
+                Documentation.FieldDescription = Extension.LoadString("NoCacheFieldDescription"),
+                Documentation.AllowedValues = {true, false}
+            ])
         ]
     )
     ) as table meta [
@@ -290,7 +300,21 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
             else
                 ConnectionString,
 
-        OdbcDatasource = Odbc.DataSource(ConnectionStringWithSSL, [
+        resolvedOptions = options ?? [],
+
+        // Apply Power Query's default timeout via SingleStore ODBC driver parameters
+        // to ensure consistent behavior when no custom value is provided.
+        commandTimeout = resolvedOptions[CommandTimeout]? ?? 600,
+        noCache = resolvedOptions[NoCache]? ?? true,
+
+        ConnectionStringWithOptions =
+            ConnectionStringWithSSL
+            & [
+                READ_TIMEOUT = commandTimeout,
+                NO_CACHE = if noCache then 1 else 0
+            ],
+
+        OdbcDatasource = Odbc.DataSource(ConnectionStringWithOptions, [
             // A logical (true/false) that sets whether to view the tables grouped by their schema names
             HierarchicalNavigation = true, 
             // Prevents execution of native SQL statements. Extensions should set this to true.
