@@ -180,12 +180,6 @@
   <data name="UseSSLAllowedValues" xml:space="preserve">
     <value>true, false</value>
   </data>
-  <data name="ConnectionTimeoutFieldCaption" xml:space="preserve">
-    <value>Connection timeout (seconds)</value>
-  </data>
-  <data name="ConnectionTimeoutFieldDescription" xml:space="preserve">
-    <value>Seconds to wait for the connection to the server to be established. Defaults to 15 seconds.</value>
-  </data>
   <data name="CommandTimeoutFieldCaption" xml:space="preserve">
     <value>Command timeout (seconds)</value>
   </data>

@@ -108,11 +108,6 @@ SingleStoreConnectorMetaMain = type function (
     ]),
     optional options as (
         type nullable [
-            optional ConnectionTimeout = (type nullable number meta [
-                Documentation.FieldCaption = Extension.LoadString("ConnectionTimeoutFieldCaption"),
-                Documentation.FieldDescription = Extension.LoadString("ConnectionTimeoutFieldDescription"),
-                Documentation.SampleValues = { 15 }
-            ]),
             optional CommandTimeout = (type nullable number meta [
                 Documentation.FieldCaption = Extension.LoadString("CommandTimeoutFieldCaption"),
                 Documentation.FieldDescription = Extension.LoadString("CommandTimeoutFieldDescription"),
@@ -307,16 +302,14 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
 
         resolvedOptions = options ?? [],
 
-        // Apply Power Query's default timeouts via SingleStore ODBC driver parameters
-        // to ensure consistent behavior when no custom values are provided.
+        // Apply Power Query's default timeout via SingleStore ODBC driver parameters
+        // to ensure consistent behavior when no custom value is provided.
         commandTimeout = resolvedOptions[CommandTimeout]? ?? 600,
-        connectionTimeout = resolvedOptions[ConnectionTimeout]? ?? 15,
         noCache = resolvedOptions[NoCache]? ?? true,
 
         ConnectionStringWithOptions =
             ConnectionStringWithSSL
             & [
-                CONN_TIMEOUT = connectionTimeout,
                 READ_TIMEOUT = commandTimeout,
                 NO_CACHE = if noCache then 1 else 0
             ],
