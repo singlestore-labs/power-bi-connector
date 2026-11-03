@@ -306,18 +306,20 @@ GetODBCDataSource = (Database as text, ConnectionString as record, optional opti
                 ConnectionString,
 
         resolvedOptions = options ?? [],
-        // Power Query defaults CommandTimeout to 600 seconds (10 minutes), but the
-        // SingleStore ODBC driver does not enforce SQL_ATTR_QUERY_TIMEOUT.
-        // Set READ_TIMEOUT explicitly to 600 seconds to approximate Power Query's
-        // default behavior when no custom timeout is specified.
-        commandTimeout = resolvedOptions[CommandTimeout] ?? 600,
 
-        // Advanced options go into the connection string as SingleStore ODBC driver keywords.
+        // Apply Power Query's default timeouts via SingleStore ODBC driver parameters
+        // to ensure consistent behavior when no custom values are provided.
+        commandTimeout = resolvedOptions[CommandTimeout]? ?? 600,
+        connectionTimeout = resolvedOptions[ConnectionTimeout]? ?? 15,
+        noCache = resolvedOptions[NoCache]? ?? true,
+
         ConnectionStringWithOptions =
             ConnectionStringWithSSL
-            & [READ_TIMEOUT = commandTimeout]
-            & (if resolvedOptions[ConnectionTimeout]? <> null then [CONN_TIMEOUT = resolvedOptions[ConnectionTimeout]] else [])
-            & (if resolvedOptions[NoCache]? <> null then [NO_CACHE = if resolvedOptions[NoCache] then 1 else 0] else []),
+            & [
+                CONN_TIMEOUT = connectionTimeout,
+                READ_TIMEOUT = commandTimeout,
+                NO_CACHE = if noCache then 1 else 0
+            ],
 
         OdbcDatasource = Odbc.DataSource(ConnectionStringWithOptions, [
             // A logical (true/false) that sets whether to view the tables grouped by their schema names

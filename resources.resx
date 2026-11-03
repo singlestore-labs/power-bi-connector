@@ -184,13 +184,13 @@
     <value>Connection timeout (seconds)</value>
   </data>
   <data name="ConnectionTimeoutFieldDescription" xml:space="preserve">
-    <value>Seconds to wait for the connection to the server to be established. Leave empty to use the default timeout behavior.</value>
+    <value>Seconds to wait for the connection to the server to be established. Defaults to 15 seconds.</value>
   </data>
   <data name="CommandTimeoutFieldCaption" xml:space="preserve">
     <value>Command timeout (seconds)</value>
   </data>
   <data name="CommandTimeoutFieldDescription" xml:space="preserve">
-    <value>Maximum time to wait for a server response during query execution, in seconds. Leave empty to use the default timeout behavior.</value>
+    <value>Maximum time to wait for a server response during query execution, in seconds. Defaults to 600 seconds (10 minutes).</value>
   </data>
   <data name="NoCacheFieldCaption" xml:space="preserve">
     <value>Disable driver result cache</value>
