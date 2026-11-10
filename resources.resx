@@ -180,4 +180,16 @@
   <data name="UseSSLAllowedValues" xml:space="preserve">
     <value>true, false</value>
   </data>
+  <data name="CommandTimeoutFieldCaption" xml:space="preserve">
+    <value>Command timeout (seconds)</value>
+  </data>
+  <data name="CommandTimeoutFieldDescription" xml:space="preserve">
+    <value>Maximum time to wait for a server response during query execution, in seconds. Defaults to 600 seconds (10 minutes).</value>
+  </data>
+  <data name="NoCacheFieldCaption" xml:space="preserve">
+    <value>Disable driver result cache</value>
+  </data>
+  <data name="NoCacheFieldDescription" xml:space="preserve">
+    <value>Disables ODBC driver result caching for forward-only cursors, reducing memory usage when retrieving large result sets. Enabled by default.</value>
+  </data>
 </root>
